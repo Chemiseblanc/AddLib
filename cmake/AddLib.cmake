@@ -29,7 +29,7 @@ message(NOTICE "===========================================================")
 function(add_lib) # [1.1]
     # A shortcut for the boilerplate required to define a library target
     # by default creates static and shared library variants with the naming convention
-    # ${PROJECT_NAME}::${NAME}(_shared)
+    # ${PROJECT_NAME}::${NAME}(_static)
     # Header-only and dynamically loadable libraries can be created as options.
     # See the following keyword definitions for a list and description of the options
     include(CMakeParseArguments)
@@ -47,6 +47,7 @@ function(add_lib) # [1.1]
             NAME            # Target name
             TEST_FRAMEWORK  # Name of testing framework to integrate with.
                             # Supported values are: Catch2, GTest, BoostTest
+            COMPONENT       # Add this target to a component which can be specified in find_package
             )
     set(multiValues
             SOURCES GLOB_SOURCES                            # Source file list or glob expressions
@@ -57,6 +58,7 @@ function(add_lib) # [1.1]
             PRECOMPILE_HEADERS PRIVATE_PRECOMPILE_HEADERS   # List of headers to precompile
             TESTS GLOB_TESTS                                # Test file list or glob expressions
             TEST_LINK_TARGETS                               # Additional targets to link to tests
+            DEPENDS_ON                                      # Required components in this or other packages
             )
     cmake_parse_arguments(ARG "${noValues}" "${singleValues}" "${multiValues}" ${ARGN})
 
@@ -233,54 +235,95 @@ function(add_lib) # [1.1]
     else()
         if(NOT ARG_SHARED_ONLY)
             # Static Library Definition
-            set(target_name ${PROJECT_NAME}_${ARG_NAME})
-            set(target_alias ${PROJECT_NAME}::${ARG_NAME})
+            if (NOT ARG_STATIC_ONLY)
+                set(target_suffix "_static")
+            endif()
+            set(target_name ${PROJECT_NAME}_${ARG_NAME}${target_suffix})
+            set(target_alias ${PROJECT_NAME}::${ARG_NAME}${target_suffix})
             add_library(${target_name} STATIC)
             COMMON_TARGET_DEFS()
         endif()
         if(NOT ARG_STATIC_ONLY)
             # Shared Library Definition
-            if (NOT ARG_SHARED_ONLY)
-                set(target_postfix "_shared")
-            endif()
-            set(target_name ${PROJECT_NAME}_${ARG_NAME}${target_postfix})
-            set(target_alias ${PROJECT_NAME}::${ARG_NAME}${target_postfix})
+            set(target_name ${PROJECT_NAME}_${ARG_NAME})
+            set(target_alias ${PROJECT_NAME}::${ARG_NAME})
             add_library(${target_name} SHARED)
             COMMON_TARGET_DEFS()
         endif()
     endif()
 
     if(NOT NO_INSTALL)
-        # Add components to install lists
-        set_property(GLOBAL APPEND PROPERTY ${PROJECT_NAME}_INSTALL_TARGETS ${install_targets})
-        set_property(GLOBAL APPEND PROPERTY ${PROJECT_NAME}_INSTALL_INCLUDE_DIRS ${ARG_INCLUDE_DIRS})
+        # Set the component to default if it wasn't specified
+        if(NOT ARG_COMPONENT)
+            set(ARG_COMPONENT Core)
+        endif()
+        # Add the component to a list of components in the project
+        # if it wasn't already present
+        get_property(component_list GLOBAL PROPERTY ${PROJECT_NAME}_COMPONENT_LIST)
+        if(NOT ${ARG_COMPONENT} IN_LIST component_list)
+            list(APPEND component_list ${ARG_COMPONENT})
+        endif()
+        set_property(GLOBAL APPEND PROPERTY ${PROJECT_NAME}_COMPONENT_LIST ${component_list})
+        # Add the specified dependent packages/components to a list for the
+        # specified component
+        get_property(dep_list GLOBAL PROPERTY ${PROJECT_NAME}_${ARG_COMPONENT}_DEPENDS_ON)
+        foreach(dep IN LISTS ARG_DEPENDS_ON)
+            if (NOT ${dep} IN_LIST dep_list)
+                list(APPEND dep_list ${dep})
+            endif()
+        endforeach()
+        set_property(GLOBAL APPEND PROPERTY ${PROJECT_NAME}_${ARG_COMPONENT}_DEPENDS_ON ${dep_list})
+
+        # Define install for current targets
+        install(TARGETS ${install_targets} EXPORT ${PROJECT_NAME}_${ARG_COMPONENT}
+                RUNTIME
+                    DESTINATION ${CMAKE_INSTALL_BINDIR}
+                LIBRARY
+                    DESTINATION ${CMAKE_INSTALL_LIBDIR}
+                ARCHIVE
+                    DESTINATION ${CMAKE_INSTALL_LIBDIR}
+                PUBLIC_HEADER
+                    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+        install(DIRECTORY ${ARG_INCLUDE_DIRS}
+                    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+                    PATTERN "*.h"
+                    PATTERN "*.H"
+                    PATTERN "*.hpp"
+                    PATTERN "*.hxx"
+                    PATTERN "*.hh"
+                    PATTERN "*.h++"
+                    PATTERN "*.cuh")
     endif()
 endfunction()
 
-function(install_project) # [2]
-    # Simple install configuration without components
-    get_property(targets GLOBAL PROPERTY ${PROJECT_NAME}_INSTALL_TARGETS)
-    get_property(include_dirs GLOBAL PROPERTY ${PROJECT_NAME}_INSTALL_INCLUDE_DIRS)
-
-    install(TARGETS ${targets} EXPORT ${PROJECT_NAME}
-            RUNTIME
-                DESTINATION ${CMAKE_INSTALL_BINDIR}
-            LIBRARY
-                DESTINATION ${CMAKE_INSTALL_LIBDIR}
-            ARCHIVE
-                DESTINATION ${CMAKE_INSTALL_LIBDIR}
-            PUBLIC_HEADER
-                DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
-    install(DIRECTORY ${include_dirs}
-                DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-                PATTERN "*.h"
-                PATTERN "*.hpp"
-                PATTERN "*.hxx"
-                PATTERN "*.hh")
-    install(EXPORT ${PROJECT_NAME}
-            DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}
-            NAMESPACE ${PROJECT_NAME}::
-            FILE ${PROJECT_NAME}Config.cmake)
+function(default_install_current_project) # [2]
+    # Get list of components for project
+    get_property(comps GLOBAL PROPERTY ${PROJECT_NAME}_COMPONENT_LIST)
+    # Export config file for each component
+    foreach(comp IN LISTS comps)
+        get_property(${comp}_DEPENDS_ON GLOBAL PROPERTY ${PROJECT_NAME}_${comp}_DEPENDS_ON)
+        if(${comp}_DEPENDS_ON)
+            string(APPEND package_dependencies "set(${comp}_DEPENDS_ON ${${comp}_DEPENDS_ON})\n")
+        endif()
+        install(EXPORT ${PROJECT_NAME}_${comp}
+                DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}
+                NAMESPACE ${PROJECT_NAME}::
+                FILE ${PROJECT_NAME}_${comp}.cmake)
+    endforeach()
+    # Export config file for package
+    include(CMakePackageConfigHelpers)
+    set(module_dir "${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}")
+    configure_package_config_file(
+            ${CMAKE_CURRENT_FUNCTION_LIST_DIR}/ProjectConfig.cmake.in ${PROJECT_NAME}Config.cmake
+            INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}
+            PATH_VARS module_dir
+            NO_SET_AND_CHECK_MACRO
+            NO_CHECK_REQUIRED_COMPONENTS_MACRO)
+    write_basic_package_version_file(${PROJECT_NAME}ConfigVersion.cmake
+            COMPATIBILITY SameMajorVersion)
+    install(FILES ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}Config.cmake
+            ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}ConfigVersion.cmake
+            DESTINATION ${module_dir})
 endfunction()
 
 # [3.1] Target Registration

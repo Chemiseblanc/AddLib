@@ -1,0 +1,103 @@
+@PACKAGE_INIT@
+
+list(APPEND CMAKE_MODULE_PATH "@PACKAGE_module_dir@")
+set(${CMAKE_FIND_PACKAGE_NAME}_AVAILABLE_COMPONENTS "@comps@")
+@package_dependencies@
+
+if(${CMAKE_FIND_PACKAGE_NAME}_FIND_COMPONENTS)
+    foreach(component IN LISTS ${CMAKE_FIND_PACKAGE_NAME}_FIND_COMPONENTS)
+        if(NOT EXISTS ${CMAKE_CURRENT_LIST_DIR}/${CMAKE_FIND_PACKAGE_NAME}_${component}.cmake)
+            if(${CMAKE_FIND_PACKAGE_NAME}_FIND_REQUIRED_${component})
+                set(${CMAKE_FIND_PACKAGE_NAME}_NOT_FOUND_MESSAGE "${CMAKE_FIND_PACKAGE_NAME} missing required component ${component}")
+                set(${CMAKE_FIND_PACKAGE_NAME}_FOUND FALSE)
+                return()
+            elseif(NOT ${CMAKE_FIND_PACKAGE_NAME}_FIND_QUIETLY)
+                message(WARNING "${CMAKE_FIND_PACKAGE_NAME} missing requested component ${component}")
+                list(REMOVE_ITEM ${CMAKE_FIND_PACKAGE_NAME}_FIND_COMPONENTS ${component})
+            endif()
+        endif()
+    endforeach()
+else()
+    set(${CMAKE_FIND_PACKAGE_NAME}_FIND_COMPONENTS ${${CMAKE_FIND_PACKAGE_NAME}_AVAILABLE_COMPONENTS})
+endif()
+
+# First process dependencies for requested components to get package name and optional sub components
+include(CMakeFindDependencyMacro)
+foreach(component IN LISTS ${CMAKE_FIND_PACKAGE_NAME}_COMPONENTS)
+    foreach(dependency IN LISTS ${component}_DEPENDS_ON)
+        if(NOT ${dependency} IN_LIST ${CMAKE_FIND_PACKAGE_NAME}_RAW_DEPENDENCIES)
+            list(APPEND ${CMAKE_FIND_PACKAGE_NAME}_RAW_DEPENDENCIES ${dependency})
+            # Format for dependencies is package_name[@version]::component_name
+            string(REPLACE "::" ";" dependency_args ${dependency})
+            list(GET dependency_args 0 dependency_package_name)
+            list(GET dependency_args 1 dependency_component_name)
+            string(REPLACE "@" ";" dependency_args ${dependency_package_name})
+            list(GET dependency_args 0 dependency_package_name)
+            list(GET dependency_args 0 dependency_version)
+
+            list(APPEND ${CMAKE_FIND_PACKAGE_NAME}_DEPENDENCIES ${dependency_package_name})
+            list(APPEND ${CMAKE_FIND_PACKAGE_NAME}_${dependency_package_name}_COMPONENTS ${dependency_component_name})
+            list(APPEND ${CMAKE_FIND_PACKAGE_NAME}_${dependency_package_name}_VERSIONS ${dependency_version})
+            list(APPEND ${CMAKE_FIND_PACKAGE_NAME}_${dependency_package_name}_REQUIRED_BY ${component})
+        endif()
+    endforeach()
+endforeach()
+
+# For each required package try and find it, if it's not found see if the requiring component(s) were optional,
+# if they were optional then remove those components from the list of packages and print a warning if not in quite mode.
+foreach(dependency IN LISTS ${CMAKE_FIND_PACKAGE_NAME}_DEPENDENCIES)
+    # Resolve intra-package dependencies
+    # Same logic applies as for finding other dependencies except it checks against already requested components
+    # and looks for the PackageName_Component.cmake file instead of using find_dependency
+    if(${dependency} STREQUAL ${CMAKE_FIND_PACKAGE_NAME})
+        foreach(component IN LISTS ${CMAKE_FIND_PACKAGE_NAME}_${dependency}_COMPONENTS)
+            if(NOT ${component} IN_LIST ${CMAKE_FIND_PACKAGE_NAME}_FIND_COMPONENTS)
+                if(EXISTS ${CMAKE_CURRENT_LIST_DIR}/${CMAKE_FIND_PACKAGE_NAME}_${component}.cmake)
+                    list(APPEND ${CMAKE_FIND_PACKAGE_NAME}_FIND_COMPONENTS ${component})
+                else()
+                    foreach(requiring_component IN LISTS ${CMAKE_FIND_PACKAGE_NAME}_${dependency}_REQUIRED_BY)
+                        if(${CMAKE_FIND_PACKAGE_NAME}_FIND_REQUIRED_${requiring_component})
+                            set(${CMAKE_FIND_PACKAGE_NAME}_NOT_FOUND_MESSAGE "${CMAKE_FIND_PACKAGE_NAME}::${requiring_component} depends on \
+    ${dependency}::${${CMAKE_FIND_PACKAGE_NAME}_${dependency}_COMPONENTS} which was unable to be found.")
+                            set(${CMAKE_FIND_PACKAGE_NAME}_FOUND FALSE)
+                            return()
+                        elseif(NOT ${CMAKE_FIND_PACKAGE_NAME}_FIND_QUIETLY)
+                            message(WARNING "${CMAKE_FIND_PACKAGE_NAME}::${requiring_component} was requested but depends on\
+    ${dependency}::${${CMAKE_FIND_PACKAGE_NAME}_${dependency}_COMPONENTS} which was unable to be found.")
+                            list(REMOVE_ITEM ${CMAKE_FIND_PACKAGE_NAME}_FIND_COMPONENTS ${requiring_component})
+                        endif()
+                    endforeach()
+                endif()
+            endif()
+        endforeach()
+        continue()
+    endif()
+
+    # For external dependencies make sure that only one version has been requested
+    list(LENGTH ${CMAKE_FIND_PACKAGE_NAME}_${dependency_package_name}_VERSIONS num_versions)
+    if(num_versions AND ${versions} GREATER_THAN 1)
+        set(${CMAKE_FIND_PACKAGE_NAME}_NOT_FOUND_MESSAGE "${CMAKE_FIND_PACKAGE_NAME}::${${CMAKE_FIND_PACKAGE_NAME}_${dependency}_REQUIRED_BY}\
+all require ${dependency} but request different versions: ${${CMAKE_FIND_PACKAGE_NAME}_${dependency_package_name}_VERSIONS}")
+    endif()
+
+    find_dependency(${dependency} COMPONENTS ${${CMAKE_FIND_PACKAGE_NAME}_${dependency}_COMPONENTS})
+    if(NOT ${dependency_FOUND})
+        foreach(component IN LISTS ${CMAKE_FIND_PACKAGE_NAME}_${dependency}_REQUIRED_BY)
+            if(${CMAKE_FIND_PACKAGE_NAME}_FIND_REQUIRED_${component})
+                set(${CMAKE_FIND_PACKAGE_NAME}_NOT_FOUND_MESSAGE "${CMAKE_FIND_PACKAGE_NAME}::${component} depends on \
+${dependency}::${${CMAKE_FIND_PACKAGE_NAME}_${dependency}_COMPONENTS} which was unable to be found.")
+                set(${CMAKE_FIND_PACKAGE_NAME}_FOUND FALSE)
+                return()
+            elseif(NOT ${CMAKE_FIND_PACKAGE_NAME}_FIND_QUIETLY)
+                message(WARNING "${CMAKE_FIND_PACKAGE_NAME}::${component} was requested but depends on\
+${dependency}::${${CMAKE_FIND_PACKAGE_NAME}_${dependency}_COMPONENTS} which was unable to be found.")
+                list(REMOVE_ITEM ${CMAKE_FIND_PACKAGE_NAME}_FIND_COMPONENTS ${component})
+            endif()
+        endforeach()
+    endif()
+endforeach()
+
+# Load the requested components that have had their dependencies satisfied
+foreach(component IN LISTS ${CMAKE_FIND_PACKAGE_NAME}_FIND_COMPONENTS)
+    include(${CMAKE_CURRENT_LIST_DIR}/${PACKAGE_NAME}_${comp}.cmake)
+endforeach()

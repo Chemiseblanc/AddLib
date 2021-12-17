@@ -18,7 +18,7 @@ add_lib(NAME Example
             CXX_STANDARD 17
         TESTS
             test/hello_world.cpp)
-install_project()
+default_install_current_project()
 
 list_project_targets()
 list_project_tests()

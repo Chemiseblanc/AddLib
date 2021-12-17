@@ -16,7 +16,11 @@ It combines many of the target_* and related commands into a simpler, compact in
 ### Defining Libraries
 ### Defining Executables
 ### Unit Testing
-### CDash Integration
 ### Installation
 ### Packaging
+
+## Conventions
+### Target Naming
+### Installation Components
+### CMake Package Components
 
