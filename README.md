@@ -11,6 +11,15 @@ It combines many of the target_* and related commands into a simpler, compact in
   - Catch2
   - Google Test
   - Boost.Test
+  
+## To-Do
+- Test backend integration
+- Something with install sets
+  - Runtime (exe and shared libs)
+  - Dev (headers and docs)
+  - Static (static libs)
+- CPack integration
+- add_exe
 
 ## Usage
 ### Defining Libraries

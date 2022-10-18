@@ -10,6 +10,10 @@
 # 1.1.2     - Test creation
 # 1.1.3     - Target definition
 # 1.2     - function(add_exe)
+# 2     - Installation and Packaging
+# 2.1     - function(default_install_current_project)
+# 2.2     - function(specify_dependency)
+# 2.3     - function(specify_version_compatability)
 # 2     - function(install_project)
 # 3     - Registration and Listing
 # 3.1     - Target Registration
@@ -20,6 +24,7 @@
 # 3.2.1     - function(register_test)
 # 3.2.2     - function(list_tests)
 # 3.2.3     - function(list_project_tests)
+# 4     - Project Options
 include_guard(GLOBAL)
 message(NOTICE "===========================================================")
 message(NOTICE "=== Using AddLib.cmake v1.0.0 - Modern CMake Simplified ===")
@@ -54,6 +59,7 @@ function(add_lib) # [1.1]
             INCLUDE_DIRS PRIVATE_INCLUDE_DIRS               # include directories for target
             LINK PRIVATE_LINK                               # Targets to link against
             PROPERTIES                                      # Target properties
+            COMPILE_FEATURES PRIVATE_COMPILE_FEATURES       # Target compile features
             FLAGS PRIVATE_FLAGS                             # Manually specified compile flags for target
             PRECOMPILE_HEADERS PRIVATE_PRECOMPILE_HEADERS   # List of headers to precompile
             TESTS GLOB_TESTS                                # Test file list or glob expressions
@@ -76,7 +82,7 @@ function(add_lib) # [1.1]
     # Compile flags for strict mode.
     # This is enabled by default unless add_lib is given RELAXED as an argument
     if(UNIX)
-        set(STRICT_FLAGS -Wall -Wextra -Werror -pedantic)
+        set(STRICT_FLAGS -Wall -Wextra -pedantic)
     elseif(WIN32)
     endif()
 
@@ -111,13 +117,13 @@ function(add_lib) # [1.1]
             set(PRIVATE_KEYWORD PRIVATE)
         endif()
 
-        if (ARG_EXPORT_ALL_SYMBOLS)
+        if(ARG_EXPORT_ALL_SYMBOLS)
             list(APPEND ARG_PROPERTIES
                     C_VISIBILITY_PRESET visible
                     CXX_VISIBILITY_PRESET visible
                     VISIBILITY_INLINES_HIDDEN NO)
         else()
-            if (NOT (ARG_STATIC_ONLY OR ARG_HEADER_ONLY))
+            if(NOT (ARG_STATIC_ONLY OR ARG_HEADER_ONLY))
                 include(GenerateExportHeader)
                 generate_export_header(${target_name} BASE_NAME ${PROJECT_NAME})
                 target_include_directories(${target_name}
@@ -132,7 +138,7 @@ function(add_lib) # [1.1]
 
         # If glob expressions for source files are present, it processes them and appends to the source list.
         # Also prints a warning since globing is not recommended for large projects.
-        if (ARG_GLOB_SOURCES)
+        if(ARG_GLOB_SOURCES)
             message(STATUS "Globbing sources for ${target_name}. This may increase configure times.")
             file(GLOB ${target_name}_GLOB_SOURCES CONFIGURE_DEPENDS ${ARG_GLOB_SOURCES})
             list(APPEND ${ARG_SOURCES} ${target_name}_GLOB_SOURCES)
@@ -152,6 +158,11 @@ function(add_lib) # [1.1]
                     ${ARG_LINK}
                 ${PRIVATE_KEYWORD}
                     ${ARG_PRIVATE_LINK})
+        target_compile_features(${target_name}
+                ${PUBLIC_KEYWORD}
+                    ${ARG_COMPILE_FEATURES}
+                ${PRIVATE_KEYWORD}
+                    ${ARG_PRIVATE_COMPILE_FEATURES})
         if(ARG_PROPERTIES)
             set_target_properties(${target_name}
                 PROPERTIES
@@ -181,16 +192,16 @@ function(add_lib) # [1.1]
             if(ARG_TESTS)
                 if(ARG_TEST_FRAMEWORK)
                     if(${ARG_TEST_FRAMEWORK} STREQUAL Catch2)
-                        # Catch2
+                        # TODO
                         include(Catch)
                         if(TARGET Catch2::Catch2WithMain)
                         else()
                         endif()
                     elseif(${ARG_TEST_FRAMEWORK} STREQUAL GTest)
-                        # Google Test
+                        # TODO
                         include(GoogleTest)
                     elseif(${ARG_TEST_FRAMEWORK} STREQUAL BoostTest)
-                        # Boost.Test
+                        # TODO
                         include(BoostTestTargets)
                     else()
                         message(FATAL_ERROR "Unsupported test framework ${ARG_TEST_FRAMEWORK}.")
@@ -241,6 +252,7 @@ function(add_lib) # [1.1]
             set(target_name ${PROJECT_NAME}_${ARG_NAME}${target_suffix})
             set(target_alias ${PROJECT_NAME}::${ARG_NAME}${target_suffix})
             add_library(${target_name} STATIC)
+            target_compile_definitions(${target_name} PRIVATE ${PROJECT_NAME}_STATIC_DEFINE)
             COMMON_TARGET_DEFS()
         endif()
         if(NOT ARG_STATIC_ONLY)
@@ -296,7 +308,9 @@ function(add_lib) # [1.1]
     endif()
 endfunction()
 
-function(default_install_current_project) # [2]
+# [2]
+function(default_install_current_project) # [2.1]
+    # Create a default installation configuration and generate package config file.
     # Get list of components for project
     get_property(comps GLOBAL PROPERTY ${PROJECT_NAME}_COMPONENT_LIST)
     # Export config file for each component
@@ -319,11 +333,49 @@ function(default_install_current_project) # [2]
             PATH_VARS module_dir
             NO_SET_AND_CHECK_MACRO
             NO_CHECK_REQUIRED_COMPONENTS_MACRO)
+    get_property(policy GLOBAL PROPERTY ${PROJECT_NAME}_COMPATABILITY)
+    if(NOT policy)
+        set(policy ExactVersion)
+    endif()
     write_basic_package_version_file(${PROJECT_NAME}ConfigVersion.cmake
-            COMPATIBILITY SameMajorVersion)
+            COMPATIBILITY ${policy})
     install(FILES ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}Config.cmake
             ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}ConfigVersion.cmake
             DESTINATION ${module_dir})
+endfunction()
+
+function(specify_dependency) # [2.2]
+    # Allows you to specify dependencies on a per-component basis instead of
+    # through the DEPENDS_ON option for add_lib
+    set(noValues)
+    set(singleValues
+            COMPONENT)
+    set(multiValues
+            DEPENDS_ON)
+    cmake_parse_arguments(ARG "${noValues}" "${singleValues}" "${multiValues}" ${ARGN})
+
+    if(NOT ARG_COMPONENT)
+        set(ARG_COMPONENT Core)
+    endif()
+
+    get_property(dep_list GLOBAL PROPERTY ${PROJECT_NAME}_${ARG_COMPONENT}_DEPENDS_ON)
+    foreach(dep IN LISTS ARG_DEPENDS_ON)
+        if (NOT ${dep} IN_LIST dep_list)
+            list(APPEND dep_list ${dep})
+        endif()
+    endforeach()
+    set_property(GLOBAL APPEND PROPERTY ${PROJECT_NAME}_${ARG_COMPONENT}_DEPENDS_ON ${dep_list})
+endfunction()
+
+function(specify_version_compatability policy) # [2.3]
+    # Set the version compatability policy for generated packages
+    # This is used if find_package is given a version parameter.
+    set(allowed_options "AnyNewerVersion;SameMajorVersion;SameMinorVersion;ExactVersion")
+    if(${policy} IN_LIST allowed_options)
+        set_property(GLOBAL PROPERTY ${PROJECT}_COMPATABILITY ${policy})
+    else()
+        message(FATAL_ERROR "Unknown compatability policy ${policy}. Must be one of: ${allowed_options}")
+    endif()
 endfunction()
 
 # [3.1] Target Registration

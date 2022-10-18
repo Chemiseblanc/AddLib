@@ -3,6 +3,6 @@
 
 #include "addlib_export.h"
 
-void ADDLIB_EXPORT say_hello();
+ADDLIB_EXPORT void say_hello();
 
 #endif
