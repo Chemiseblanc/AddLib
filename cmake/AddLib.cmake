@@ -1,347 +1,394 @@
 # =====================================================================
 # AddLib.cmake - Modern CMake Simplified.
-# Version 1.0.0
-# Copyright 2021 Matthew Gibson <matt@mgibson.ca>. All Rights Reserved.
+# Version 2.0.0
+# Copyright Matthew Gibson 2022.
+# Distributed under the Boost Software License, Version 1.0.
+# (See accompanying file LICENSE.txt or copy at 
+#  https://www.boost.org/LICENSE_1_0.txt)
 # =====================================================================
 # Table of Contents:
 # 1     - Target Creation
-# 1.1     - function(add_lib)
-# 1.1.1     - macro(COMMON_TARGET_DEFS)
-# 1.1.2     - Test creation
-# 1.1.3     - Target definition
-# 1.2     - function(add_exe)
-# 2     - Installation and Packaging
-# 2.1     - function(default_install_current_project)
-# 2.2     - function(specify_dependency)
-# 2.3     - function(specify_version_compatability)
-# 2     - function(install_project)
-# 3     - Registration and Listing
-# 3.1     - Target Registration
-# 3.1.1     - function(register_target)
-# 3.1.1     - function(list_targets)
-# 3.1.2     - function(list_project_targets)
-# 3.2     - Test Registration
-# 3.2.1     - function(register_test)
-# 3.2.2     - function(list_tests)
-# 3.2.3     - function(list_project_tests)
-# 4     - Project Options
+# 1.1    - function(add_exe)
+# 1.2    - function(add_lib)
+# 1.3    - function(addlib_target)
+# 1.3.1   - Target naming
+# 1.3.2   - Target attributes
+# 1.3.3   - Test creation
+# 2     - Installation
+# 2.1    - function(install_project)
+# 2.2    - function()
+# 2.3    - function()
+# 3     - Packaging
+# 3.1    - function(package_project)
+# 3.1.1   - Global packaging variables
+# 3.1.2   - Packaging generator detection
+# 3.1.3   - Defining package variants
+# 3.1.4   - DEB specific options
+# 3.1.5   - RPM specific options
+# 3.1.6   - Component grouping
+# 4     - Utility
+# 4.1    - function(list_targets)
 include_guard(GLOBAL)
 message(NOTICE "===========================================================")
-message(NOTICE "=== Using AddLib.cmake v1.0.0 - Modern CMake Simplified ===")
+message(NOTICE "=== Using AddLib.cmake v2.0.0 - Modern CMake Simplified ===")
 message(NOTICE "===========================================================")
 
 # [1] Target Creation
-function(add_lib) # [1.1]
-    # A shortcut for the boilerplate required to define a library target
-    # by default creates static and shared library variants with the naming convention
-    # ${PROJECT_NAME}::${NAME}(_static)
-    # Header-only and dynamically loadable libraries can be created as options.
-    # See the following keyword definitions for a list and description of the options
+function(add_exe target) # [1.1]
+    # Creates a new executable target
+    addlib_target(target EXECUTABLE ${ARGN})
+endfunction()
+
+function(add_lib target) # [1.2]
+    # Creates a new library target
+    # Handles setting symbol visibility and creating the export header for shared libraries.
+    # Also provides an option to create both shared and static variants of a library.
+    # By default the generated targets follow the naming convention
+    # ${PROJECT_NAME}::${target}(_static)
     include(CMakeParseArguments)
-    set(noValues
-            STATIC_ONLY         # Create target as a strictly static library
-            SHARED_ONLY         # Create target as a strictly shared library
-            HEADER_ONLY         # Create target as a header-only library
-            MODULE              # Created target as a dynamically loaded library
-            RELAXED             # Turn off extra compiler warnings and do not treat them as errors
-            EXPORT_ALL_SYMBOLS  # Don't generate an export header and set symbol visibility to visible
-            NO_INSTALL          # Don't include the target when installing the project
-            HIDDEN              # Don't register any generated targets for listing
+    set(flags
+        SHARED
+        SHARED_AND_STATIC
+    )
+    cmake_parse_arguments(ARG "${flags}" "" "" ${ARGN})
+
+    if(ARG_SHARED OR ARG_SHARED_AND_STATIC)
+        list(REMOVE_ITEM ${ARGN} SHARED SHARED_AND_STATIC)
+        include(GenerateExportHeader)
+
+        # Add shared library variant and create export header
+        addlib_target(${target} SHARED PREFIX "${PROJECT_NAME}" ${ARGN})
+        generate_export_header(${PROJECT_NAME}_${target}
+            BASE_NAME ${PROJECT_NAME}
+            EXPORT_FILE_NAME "${PROJECT_NAME}/export.h"
+        )
+        target_include_directories(${PROJECT_NAME}_${target}
+            PUBLIC
+                $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
+        )
+
+        # Add static library variant and set define property to
+        # short circuit the symbol export/import macro
+        if(ARG_SHARED_AND_STATIC)
+            string(TOUPPER ${PROJECT_NAME} PROJECT_UPPER)
+            addlib_target(${target} STATIC PREFIX "${PROJECT_NAME}" SUFFIX "static" ${ARGN})
+            target_compile_definitions(${PROJECT_NAME}_${target}_static
+                PUBLIC
+                    ${PROJECT_UPPER}_STATIC_DEFINE)
+            target_include_directories(${PROJECT_NAME}_${target}_static
+                PUBLIC
+                    $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
             )
+        endif()
+    else()
+        # Passthrough all arguments
+        addlib_target(${target} ${ARGN})
+    endif()
+endfunction()
+
+function(addlib_target target) # [1.3] 
+    # A shortcut for handling the boilerplate for a modern target-based workflow
+    include(CMakeParseArguments)
+    set(flags
+        STATIC            # Static Library
+        SHARED            # Shared Library
+        HEADER_ONLY       # Header-Only Library
+        MODULE            # Dynamicly Loadable Library
+        EXECUTABLE        # Executable
+    )
     set(singleValues
-            NAME            # Target name
-            TEST_FRAMEWORK  # Name of testing framework to integrate with.
-                            # Supported values are: Catch2, GTest, BoostTest
-            COMPONENT       # Add this target to a component which can be specified in find_package
-            )
+        PREFIX            # Generated target prefix (Defaults to ${PROJECT_NAME})
+        SUFFIX            # Generated target suffix (Defaults empty, "static" when generating both shared and static libraries)
+        TEST_FRAMEWORK    #
+        COMPONENT         #
+    )
     set(multiValues
-            SOURCES GLOB_SOURCES                            # Source file list or glob expressions
-            INCLUDE_DIRS PRIVATE_INCLUDE_DIRS               # include directories for target
-            LINK PRIVATE_LINK                               # Targets to link against
-            PROPERTIES                                      # Target properties
-            COMPILE_FEATURES PRIVATE_COMPILE_FEATURES       # Target compile features
-            FLAGS PRIVATE_FLAGS                             # Manually specified compile flags for target
-            PRECOMPILE_HEADERS PRIVATE_PRECOMPILE_HEADERS   # List of headers to precompile
-            TESTS GLOB_TESTS                                # Test file list or glob expressions
-            TEST_LINK_TARGETS                               # Additional targets to link to tests
-            DEPENDS_ON                                      # Required components in this or other packages
-            )
-    cmake_parse_arguments(ARG "${noValues}" "${singleValues}" "${multiValues}" ${ARGN})
+        SOURCES GLOB_SOURCES
+        INCLUDE_DIRS
+        LINK
+        COMPILE_FEATURES
+        COMPILE_FLAGS
+        PRECOMPILE_HEADERS
+        PROPERTIES
+        TESTS GLOB_TESTS
+        TEST_EXTRA_LINK_TARGETS
+        DEPENDS_ON
+    )
+    cmake_parse_arguments(ARG "${flags}" "${singleValues}" "${multiValues}" ${ARGN})
 
-    # Check preconditions
-    if(ARG_KEYWORDS_MISSING_VALUES)
-        message(WARNING "No values found for arguments ${ARG_KEYWORDS_MISSING_VALUES}")
-    endif()
-    if(ARG_UNPARSED_ARGUMENTS)
-        message(WARNING "Unused arguments ${ARG_UNPARSED_ARGUMENTS}")
-    endif()
-    if(NOT ARG_NAME)
-        message(FATAL_ERROR "library must be given a name")
-    endif()
-
-    # Compile flags for strict mode.
-    # This is enabled by default unless add_lib is given RELAXED as an argument
     if(UNIX)
         set(STRICT_FLAGS -Wall -Wextra -pedantic)
     elseif(WIN32)
     endif()
 
-    # Process Include directories for build and install configs
-    foreach(path IN LISTS ARG_INCLUDE_DIRS)
-        cmake_path(IS_PREFIX CMAKE_CURRENT_SOURCE_DIR ${path} NORMALIZE prefixed)
-        if(${prefixed})
-            list(APPEND ARG_BUILD_INCLUDE_DIRS ${path})
-        else()
-            list(APPEND ARG_BUILD_INCLUDE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/${path}")
-        endif()
-    endforeach()
-    set(ARG_INCLUDE_DIRS ${ARG_BUILD_INCLUDE_DIRS})
-    unset(ARG_BUILD_INCLUDE_DIRS)
+    # [1.3.1]
 
-    macro(COMMON_TARGET_DEFS) # [1.1.1]
-        # Common library target definitions.
+    if(ARG_STATIC)
+        set(target_type STATIC)
+    elseif(ARG_SHARED)
+        set(target_type SHARED)
+    elseif(ARG_HEADER_ONLY)
+        set(target_type INTERFACE)
+    elseif(ARG_MODULE)
+        set(target_type MODULE)
+    endif()
+
+    if(ARG_PREFIX)
+        set(prefix "${ARG_PREFIX}_")
+        set(namespace "${ARG_PREFIX}::")
+    endif()
+    if (ARG_SUFFIX)
+        set(suffix "_${ARG_SUFFIX}")
+    endif()
+    set(target_name ${prefix}${target}${suffix})
+    set(target_alias ${namespace}${target}${suffix})
+
+    if(ARG_EXECUTABLE)
+        add_executable(${target_name})
+    else()
+        add_library(${target_name} ${target_type})
         add_library(${target_alias} ALIAS ${target_name})
         set_target_properties(${target_name}
-                PROPERTIES EXPORT_NAME ${ARG_NAME})
-        list(APPEND install_targets ${target_name})
+            PROPERTIES EXPORT_NAME ${target}${suffix})
+    endif()
 
-        if(NOT ARG_HIDDEN)
-            register_target(${target_alias})
-        endif()
+    # [1.3.2]
+    set(visibilityNames
+        PUBLIC PRIVATE INTERFACE)
 
-        if(ARG_HEADER_ONLY)
-            set(PUBLIC_KEYWORD INTERFACE)
-            set(PRIVATE_KEYWORD INTERFACE)
-        else()
-            set(PUBLIC_KEYWORD PUBLIC)
-            set(PRIVATE_KEYWORD PRIVATE)
-        endif()
-
-        if(ARG_EXPORT_ALL_SYMBOLS)
-            list(APPEND ARG_PROPERTIES
-                    C_VISIBILITY_PRESET visible
-                    CXX_VISIBILITY_PRESET visible
-                    VISIBILITY_INLINES_HIDDEN NO)
-        else()
-            if(NOT (ARG_STATIC_ONLY OR ARG_HEADER_ONLY))
-                include(GenerateExportHeader)
-                generate_export_header(${target_name} BASE_NAME ${PROJECT_NAME})
-                target_include_directories(${target_name}
-                        ${PUBLIC_KEYWORD}
-                            $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>)
-                list(APPEND ARG_PROPERTIES
-                        C_VISIBILITY_PRESET hidden
-                        CXX_VISIBILITY_PRESET hidden
-                        VISIBILITY_INLINES_HIDDEN YES)
-            endif()
-        endif()
-
-        # If glob expressions for source files are present, it processes them and appends to the source list.
-        # Also prints a warning since globing is not recommended for large projects.
-        if(ARG_GLOB_SOURCES)
-            message(STATUS "Globbing sources for ${target_name}. This may increase configure times.")
-            file(GLOB ${target_name}_GLOB_SOURCES CONFIGURE_DEPENDS ${ARG_GLOB_SOURCES})
-            list(APPEND ${ARG_SOURCES} ${target_name}_GLOB_SOURCES)
-        endif()
-
-        target_sources(${target_name}
-                PRIVATE
-                    ${ARG_SOURCES})
-        target_include_directories(${target_name}
-                ${PUBLIC_KEYWORD}
-                    $<BUILD_INTERFACE:${ARG_INCLUDE_DIRS}>
-                    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
-                ${PRIVATE_KEYWORD}
-                    ${ARG_PRIVATE_INCLUDE_DIRS})
-        target_link_libraries(${target_name}
-                ${PUBLIC_KEYWORD}
-                    ${ARG_LINK}
-                ${PRIVATE_KEYWORD}
-                    ${ARG_PRIVATE_LINK})
-        target_compile_features(${target_name}
-                ${PUBLIC_KEYWORD}
-                    ${ARG_COMPILE_FEATURES}
-                ${PRIVATE_KEYWORD}
-                    ${ARG_PRIVATE_COMPILE_FEATURES})
-        if(ARG_PROPERTIES)
-            set_target_properties(${target_name}
-                PROPERTIES
-                    ${ARG_PROPERTIES})
-        endif()
-        target_compile_options(${target_name}
-                ${PUBLIC_KEYWORD}
-                    ${ARG_FLAGS}
-                ${PRIVATE_KEYWORD}
-                    ${ARG_PRIVATE_FLAGS}
-                    $<$<NOT:$<BOOL:${ARG_RELAXED}>>:${STRICT_FLAGS}>)
-        target_precompile_headers(${target_name}
-                ${PUBLIC_KEYWORD}
-                    ${ARG_PRECOMPILE_HEADERS}
-                ${PRIVATE_KEYWORD}
-                    ${ARG_PRIVATE_PRECOMPILE_HEADERS})
-
-        # Generates the boilerplate for setting up tests for a target and integrating them with CTest.
-        # If a supported testing framework is supplied it creates a single test target for that framework,
-        # generating a source file with the testing main() if necessary.
-        if (BUILD_TESTING) # [1.1.2]
-            if (ARG_GLOB_TESTS)
-                message(STATUS "Globbing sources for ${target_name} tests. This may increase configure times.")
-                file(GLOB ${target_name}_GLOB_SOURCES CONFIGURE_DEPENDS ${ARG_GLOB_TESTS})
-                list(APPEND ${ARG_TESTS} ${target_name}_GLOB_SOURCES)
-            endif()
-            if(ARG_TESTS)
-                if(ARG_TEST_FRAMEWORK)
-                    if(${ARG_TEST_FRAMEWORK} STREQUAL Catch2)
-                        # TODO
-                        include(Catch)
-                        if(TARGET Catch2::Catch2WithMain)
-                        else()
-                        endif()
-                    elseif(${ARG_TEST_FRAMEWORK} STREQUAL GTest)
-                        # TODO
-                        include(GoogleTest)
-                    elseif(${ARG_TEST_FRAMEWORK} STREQUAL BoostTest)
-                        # TODO
-                        include(BoostTestTargets)
-                    else()
-                        message(FATAL_ERROR "Unsupported test framework ${ARG_TEST_FRAMEWORK}.")
-                    endif()
-                else()
-                    foreach(TEST_SRC IN LISTS ARG_TESTS)
-                        cmake_path(GET TEST_SRC STEM TEST)
-                        set(test_target ${target_name}_${TEST})
-                        add_executable(${test_target} ${TEST_SRC})
-                        target_link_libraries(${test_target}
-                                PRIVATE
-                                ${target_name})
-                        add_test(NAME ${test_target} COMMAND ${test_target})
-                        if(NOT ARG_HIDDEN)
-                            register_test(${test_target})
-                        endif()
-                    endforeach()
-                endif()
-            endif()
-        endif()
-    endmacro()
-
-    # [1.1.3] Target definition
-    # Allowed target types are listed below as mutually exclusive for targets on different lines,
-    # and mutually inclusive for targets on the same line.
-    # Target Types:
-    # - Header-Only Library
-    # - Dynamically Loadable Library
-    # - Static Library, Shared Library
     if(ARG_HEADER_ONLY)
-        # Header-Only Library Definition
-        set(target_name ${PROJECT_NAME}_${ARG_NAME})
-        set(target_alias ${PROJECT_NAME}::${ARG_NAME})
-        add_library(${target_name} INTERFACE)
-        COMMON_TARGET_DEFS()
-    elseif(ARG_MODULE)
-        # Module (Dynamically loadable library)
-        set(target_name ${PROJECT_NAME}_${ARG_NAME})
-        set(target_alias ${PROJECT_NAME}::${ARG_NAME})
-        add_library(${target_name} MODULE)
-        COMMON_TARGET_DEFS()
+        set(PUBLIC_OR_INTERFACE INTERFACE)
+        set(PRIVATE_OR_INTERFACE INTERFACE)
     else()
-        if(NOT ARG_SHARED_ONLY)
-            # Static Library Definition
-            if (NOT ARG_STATIC_ONLY)
-                set(target_suffix "_static")
+        set(PUBLIC_OR_INTERFACE PUBLIC)
+        set(PRIVATE_OR_INTERFACE PRIVATE)
+    endif()
+
+    # target_sources
+    cmake_parse_arguments(SOURCES "" "" "${visibilityNames}" ${ARG_SOURCES})
+    cmake_parse_arguments(GLOB_SOURCES "" "" "${visibilityNames}" ${ARG_GLOB_SOURCES})
+    if(GLOB_SOURCES_PUBLIC)
+        file(GLOB ${target_name}_PUBLIC_GLOB_SOURCES CONFIGURE_DEPENDS ${GLOB_SOURCES_PUBLIC})
+        list(APPEND ${SOURCES_PUBLIC} ${target_name}_PUBLIC_GLOB_SOURCES)
+    endif()
+    if(GLOB_SOURCES_PRIVATE)
+        file(GLOB ${target_name}_PRIVATE_GLOB_SOURCES CONFIGURE_DEPENDS ${GLOB_SOURCES_PRIVATE})
+        list(APPEND ${SOURCES_PRIVATE} ${target_name}_PRIVATE_GLOB_SOURCES)
+    endif()
+    if(GLOB_SOURCES_UNPARSED_ARGUMENTS)
+        file(GLOB ${target_name}_UNPARSED_ARGUMENTS_GLOB_SOURCES CONFIGURE_DEPENDS ${GLOB_SOURCES_UNPARSED_ARGUMENTS})
+        list(APPEND ${SOURCES_UNPARSED_ARGUMENTS} ${target_name}_UNPARSED_ARGUMENTS_GLOB_SOURCES)
+    endif()
+    target_sources(${target_name}
+        PUBLIC
+            ${SOURCES_PUBLIC}
+        PRIVATE
+            ${SOURCES_PRIVATE}
+        PRIVATE
+            ${SOURCES_UNPARSED_ARGUMENTS}
+    )
+
+    # target_include_directories
+    cmake_parse_arguments(INCLUDE_DIRS "" "" "${visibilityNames}" ${ARG_INCLUDE_DIRS})
+    target_include_directories(${target_name}
+        ${PUBLIC_OR_INTERFACE}
+            $<BUILD_INTERFACE:${INCLUDE_DIRS_PUBLIC}>
+            $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+        PRIVATE
+            $<BUILD_INTERFACE:${INCLUDE_DIRS_PRIVATE}>
+        INTERFACE
+            $<BUILD_INTERFACE:${INCLUDE_DIRS_INTERFACE}>
+            $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+        ${PUBLIC_OR_INTERFACE} # Default
+            $<BUILD_INTERFACE:${INCLUDE_DIRS_UNPARSED_ARGUMENTS}>
+    )
+    list(APPEND install_include_dirs 
+        ${INCLUDE_DIRS_PUBLIC}
+        ${INCLUDE_DIRS_INTERFACE}
+        ${INCLUDE_DIRS_UNPARSED_ARGUMENTS}
+    )
+
+    # target_link_libraries
+    cmake_parse_arguments(LINKS "" "" "${visibilityNames}" ${ARG_LINK})
+    target_link_libraries(${target_name}
+        ${PUBLIC_OR_INTERFACE}
+            ${LINKS_PUBLIC}
+        PRIVATE
+            ${LINKS_PRIVATE}
+        ${PUBLIC_OR_INTERFACE} # Default
+            ${LINKS_UNPARSED_ARGUMENTS}
+    )
+
+    # target_compile_features
+    cmake_parse_arguments(COMPILE_FEATURES "" "" "${visibilityNames}" ${ARG_COMPILE_FEATURES})
+    target_compile_features(${target_name}
+        PUBLIC
+            ${COMPILE_FEATURES_PUBLIC}
+        PRIVATE
+            ${COMPILE_FEATURES_PRIVATE}
+        PRIVATE # Default
+            ${COMPILE_FEATURES_UNPARSED_ARGUMENTS}
+    )
+
+    # target_compile_options
+    cmake_parse_arguments(COMPILE_FLAGS "" "" "${visibilityNames}" ${ARG_COMPILE_FLAGS})
+    target_compile_options(${target_name}
+        PUBLIC
+            ${COMPILE_FEATURES_PUBLIC}
+        PRIVATE
+            ${COMPILE_FEATUERS_PRIVATE}
+    )
+
+    # target_precompile_headers
+    cmake_parse_arguments(PRECOMPILED_HEADERS "" "" "${visibilityNames}" ${ARG_PRECOMPILE_HEADERS})
+    target_precompile_headers(${target_name}
+        PUBLIC
+            ${PRECOMPILED_HEADERS_PUBLIC}
+        PRIVATE
+            ${PRECOMPILED_HEADERS_PRIVATE}
+    )
+
+    # set_target_properties
+    if(ARG_PROPERTIES)
+        set_target_properties(${target_name} PROPERTIES ${ARG_PROPERTIES})
+    endif()
+
+    # [1.3.3]
+    if(BUILD_TESTING) 
+        if(ARG_TESTS)
+            if(ARG_TEST_FRAMEWORK)
+                if(${ARG_TEST_FRAMEWORK} STREQUAL Catch2)
+                    # TODO
+                elseif(${ARG_TEST_FRAMEWORK} STREQUAL GTest)
+                    # TODO
+                elseif(${ARG_TEST_FRAMEWORK} STREQUAL BoostTest)
+                    #TODO
+                else()
+                    message(FATAL_ERROR "Unsupported test framework ${ARG_TEST_FRAMEWORK")
+                endif()
+            else()
+                foreach(TEST_SRC IN LISTS ARG_TESTS)
+                    cmake_path(GET TEST_SRC STEM TEST)
+                    set(test_target ${target_name}_${TEST})
+                    add_executable(${test_target} ${TEST_SRC})
+                    target_link_libraries(${test_target}
+                        PRIVATE
+                            ${target_name}
+                    )
+                    add_test(NAME ${test_target} COMMAND ${test_target})
+                endforeach()
             endif()
-            set(target_name ${PROJECT_NAME}_${ARG_NAME}${target_suffix})
-            set(target_alias ${PROJECT_NAME}::${ARG_NAME}${target_suffix})
-            add_library(${target_name} STATIC)
-            target_compile_definitions(${target_name} PRIVATE ${PROJECT_NAME}_STATIC_DEFINE)
-            COMMON_TARGET_DEFS()
-        endif()
-        if(NOT ARG_STATIC_ONLY)
-            # Shared Library Definition
-            set(target_name ${PROJECT_NAME}_${ARG_NAME})
-            set(target_alias ${PROJECT_NAME}::${ARG_NAME})
-            add_library(${target_name} SHARED)
-            COMMON_TARGET_DEFS()
         endif()
     endif()
 
+    # [1.3.4]
     if(NOT NO_INSTALL)
-        # Set the component to default if it wasn't specified
+        # Assign the target to a default package component if one isn't specified
         if(NOT ARG_COMPONENT)
-            set(ARG_COMPONENT Core)
+            set(ARG_COMPONENT Unspecified)
         endif()
-        # Add the component to a list of components in the project
-        # if it wasn't already present
-        get_property(component_list GLOBAL PROPERTY ${PROJECT_NAME}_COMPONENT_LIST)
-        if(NOT ${ARG_COMPONENT} IN_LIST component_list)
-            list(APPEND component_list ${ARG_COMPONENT})
-        endif()
-        set_property(GLOBAL APPEND PROPERTY ${PROJECT_NAME}_COMPONENT_LIST ${component_list})
-        # Add the specified dependent packages/components to a list for the
-        # specified component
-        get_property(dep_list GLOBAL PROPERTY ${PROJECT_NAME}_${ARG_COMPONENT}_DEPENDS_ON)
-        foreach(dep IN LISTS ARG_DEPENDS_ON)
-            if (NOT ${dep} IN_LIST dep_list)
-                list(APPEND dep_list ${dep})
-            endif()
-        endforeach()
-        set_property(GLOBAL APPEND PROPERTY ${PROJECT_NAME}_${ARG_COMPONENT}_DEPENDS_ON ${dep_list})
 
-        # Define install for current targets
-        install(TARGETS ${install_targets} EXPORT ${PROJECT_NAME}_${ARG_COMPONENT}
-                RUNTIME
-                    DESTINATION ${CMAKE_INSTALL_BINDIR}
-                LIBRARY
-                    DESTINATION ${CMAKE_INSTALL_LIBDIR}
-                ARCHIVE
-                    DESTINATION ${CMAKE_INSTALL_LIBDIR}
-                PUBLIC_HEADER
-                    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
-        install(DIRECTORY ${ARG_INCLUDE_DIRS}
-                    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-                    PATTERN "*.h"
-                    PATTERN "*.H"
-                    PATTERN "*.hpp"
-                    PATTERN "*.hxx"
-                    PATTERN "*.hh"
-                    PATTERN "*.h++"
-                    PATTERN "*.cuh")
+        # Add the target to a list of targets in the component
+        get_property(target_list GLOBAL PROPERTY ${PROJECT_NAME}_${ARG_COMPONENT}_TARGETS)
+        list(APPEND target_list ${target_name})
+        set_property(GLOBAL PROPERTY ${PROJECT_NAME}_${ARG_COMPONENT}_TARGETS ${target_list})
+
+        # Add include directories to component list
+        get_property(include_dir_list GLOBAL PROPERTY ${PROJECT_NAME}_${ARG_COMPONENT}_INCLUDE_DIRS)
+        list(APPEND include_dir_list ${install_include_dirs})
+        list(REMOVE_DUPLICATES include_dir_list)
+        set_property(GLOBAL PROPERTY ${PROJECT_NAME}_${ARG_COMPONENT}_INCLUDE_DIRS ${include_dir_list})
+
+        # Add the component to a list of components in the project if it doesn't already exist
+        get_property(component_list GLOBAL PROPERTY ${PROJECT_NAME}_COMPONENT_LIST)
+        list(APPEND component_list ${ARG_COMPONENT})
+        list(REMOVE_DUPLICATES component_list)
+        set_property(GLOBAL PROPERTY ${PROJECT_NAME}_COMPONENT_LIST ${component_list})
+
+        # Add specified dependencies to the component dependency list if they aren't already present
+        get_property(dep_list GLOBAL PROPERTY ${PROJECT_NAME}_${ARG_COMPONENT}_DEPENDS_ON)
+        list(APPEND dep_list ${ARG_DEPENDS_ON})
+        list(REMOVE_DUPLICATES dep_list)
+        set_property(GLOBAL PROPERTY ${PROJECT_NAME}_${ARG_COMPONENT}_DEPENDS_ON ${dep_list})
+
+        # Add the target type to a component list
+        get_property(target_types GLOBAL PROPERTY ${PROJECT_NAME}_${ARG_COMPONENT}_TARGET_TYPES)
+        if(ARG_EXECUTABLE)
+            list(APPEND target_types EXECUTABLE)
+        else()
+            list(APPEND target_types ${target_type})
+        endif()
+        list(REMOVE_DUPLICATES target_types)
+        set_property(GLOBAL PROPERTY ${PROJECT_NAME}_${ARG_COMPONENT}_TARGET_TYPES ${target_types})
     endif()
 endfunction()
 
 # [2]
-function(default_install_current_project) # [2.1]
-    # Create a default installation configuration and generate package config file.
-    # Get list of components for project
-    get_property(comps GLOBAL PROPERTY ${PROJECT_NAME}_COMPONENT_LIST)
-    # Export config file for each component
-    foreach(comp IN LISTS comps)
-        get_property(${comp}_DEPENDS_ON GLOBAL PROPERTY ${PROJECT_NAME}_${comp}_DEPENDS_ON)
-        if(${comp}_DEPENDS_ON)
-            string(APPEND package_dependencies "set(${comp}_DEPENDS_ON ${${comp}_DEPENDS_ON})\n")
+function(install_project) # [2.1]
+    include(GNUInstallDirs)
+    set(CMAKE_INSTALL_DEFAULT_COMPONENT_NAME ${PROJECT_NAME}_Unspecified)
+    get_property(components GLOBAL PROPERTY ${PROJECT_NAME}_COMPONENT_LIST)
+
+    # Install targets for each component
+    foreach(component IN LISTS components)
+        get_property(targets GLOBAL PROPERTY ${PROJECT_NAME}_${component}_TARGETS)
+        get_property(dependencies GLOBAL PROPERTY ${PROJECT_NAME}_${component}_DEPENDS_ON)
+        if(dependencies)
+            string(APPEND package_dependencies "set(${component}_DEPENDS_ON ${${component}_DEPENDS_ON})\n")
         endif()
-        install(EXPORT ${PROJECT_NAME}_${comp}
-                DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}
-                NAMESPACE ${PROJECT_NAME}::
-                FILE ${PROJECT_NAME}_${comp}.cmake)
+        install(
+            TARGETS ${targets} 
+            EXPORT ${PROJECT_NAME}_${component}
+            RUNTIME
+                DESTINATION ${CMAKE_INSTALL_BINDIR}
+                COMPONENT ${PROJECT_NAME}_${component}
+            LIBRARY
+                DESTINATION ${CMAKE_INSTALL_LIBDIR}
+                COMPONENT ${PROJECT_NAME}_${component}
+            ARCHIVE
+                DESTINATION ${CMAKE_INSTALL_LIBDIR}
+                COMPONENT ${PROJECT_NAME}_${component}_static
+
+        )
+        get_property(include_dirs GLOBAL PROPERTY ${PROJECT_NAME}_${component}_INCLUDE_DIRS)
+        install(
+            DIRECTORY ${include_dirs}
+            COMPONENT ${PROJECT_NAME}_${component}_dev
+            DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+            PATTERN "*"
+        )
+        install(
+            EXPORT ${PROJECT_NAME}_${component}
+            DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}
+            NAMESPACE ${PROJECT_NAME}::
+            FILE ${PROJECT_NAME}_${component}.cmake
+            COMPONENT ${PROJECT_NAME}_${component_name}_dev
+        )
     endforeach()
-    # Export config file for package
+
+    # Create and install the project config and version files.
     include(CMakePackageConfigHelpers)
     set(module_dir "${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}")
     configure_package_config_file(
-            ${CMAKE_CURRENT_FUNCTION_LIST_DIR}/ProjectConfig.cmake.in ${PROJECT_NAME}Config.cmake
-            INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}
-            PATH_VARS module_dir
-            NO_SET_AND_CHECK_MACRO
-            NO_CHECK_REQUIRED_COMPONENTS_MACRO)
-    get_property(policy GLOBAL PROPERTY ${PROJECT_NAME}_COMPATABILITY)
+        ${CMAKE_CURRENT_FUNCTION_LIST_DIR}/ProjectConfig.cmake.in ${PROJECT_NAME}Config.cmake
+        INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}
+        PATH_VARS module_dir
+        NO_SET_AND_CHECK_MACRO
+        NO_CHECK_REQUIRED_COMPONENTS_MACRO
+    )
+    get_property(policy GLOBAL PROPERTY ${PROJECT_NAME}_COMPATIBILITY)
     if(NOT policy)
         set(policy ExactVersion)
     endif()
-    write_basic_package_version_file(${PROJECT_NAME}ConfigVersion.cmake
-            COMPATIBILITY ${policy})
-    install(FILES ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}Config.cmake
+    write_basic_package_version_file(${PROJECT_NAME}ConfigVersion.cmake 
+        COMPATIBILITY ${policy}
+    )
+    install(
+        FILES 
+            ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}Config.cmake
             ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}ConfigVersion.cmake
-            DESTINATION ${module_dir})
+        DESTINATION ${module_dir}    
+    )
 endfunction()
 
 function(specify_dependency) # [2.2]
@@ -359,12 +406,9 @@ function(specify_dependency) # [2.2]
     endif()
 
     get_property(dep_list GLOBAL PROPERTY ${PROJECT_NAME}_${ARG_COMPONENT}_DEPENDS_ON)
-    foreach(dep IN LISTS ARG_DEPENDS_ON)
-        if (NOT ${dep} IN_LIST dep_list)
-            list(APPEND dep_list ${dep})
-        endif()
-    endforeach()
-    set_property(GLOBAL APPEND PROPERTY ${PROJECT_NAME}_${ARG_COMPONENT}_DEPENDS_ON ${dep_list})
+    list(APPEND dep_list ${dep})
+    list(REMOVE_DUPLICATES dep_list)
+    set_property(GLOBAL PROPERTY ${PROJECT_NAME}_${ARG_COMPONENT}_DEPENDS_ON ${dep_list})
 endfunction()
 
 function(specify_version_compatability policy) # [2.3]
@@ -372,82 +416,189 @@ function(specify_version_compatability policy) # [2.3]
     # This is used if find_package is given a version parameter.
     set(allowed_options "AnyNewerVersion;SameMajorVersion;SameMinorVersion;ExactVersion")
     if(${policy} IN_LIST allowed_options)
-        set_property(GLOBAL PROPERTY ${PROJECT}_COMPATABILITY ${policy})
+        set_property(GLOBAL PROPERTY ${PROJECT}_COMPATIBILITY ${policy})
     else()
         message(FATAL_ERROR "Unknown compatability policy ${policy}. Must be one of: ${allowed_options}")
     endif()
 endfunction()
 
-# [3.1] Target Registration
-function(register_target) # [3.1.1]
-    # Takes target names as arguments, adds them to global and per-project lists
-    # so they can be optionally listed using list_targets() and list_project_targets()
-    foreach(arg ${ARGV})
-        list(APPEND targets ${arg})
+# [3]
+function(package_project) # [3.1]
+    set(flags)
+    set(values
+        VENDOR
+        SUMMARY
+        DESCRIPTION_FILE
+        WELCOME_FILE
+        LICENSE_FILE
+        README_FILE
+        CONTACT
+        )
+    set(lists)
+    cmake_parse_arguments(ARG "${flags}" "${values}" "${lists}" ${ARGN})
+    # if(NOT CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+    #     message(FATAL_ERROR "package_project must be called from your root CMakeLists.txt")
+    # endif()
+    
+    # [3.1.1] - Global packaging variables
+    set(CPACK_PACKAGE_NAME ${PROJECT_NAME})
+    set(CPACK_PACKAGE_VENDOR ${ARG_VENDOR})
+    set(CPACK_PACKAGE_INSTALL_DIRECTORY ${CPACK_PACKAGE_NAME})
+    set(CPACK_PACKAGE_VERSION_MAJOR ${PROJECT_VERSION_MAJOR})
+    set(CPACK_PACKAGE_VERSION_MINOR ${PROJECT_VERSION_MINOR})
+    set(CPACK_PACKAGE_VERSION_PATCH ${PROJECT_VERSION_PATCH})
+    set(CPACK_PACKAGE_DESCRIPTION_SUMMARY ${ARG_SUMMARY})
+    set(CPACK_PACKAGE_DESCRIPTION_FILE ${ARG_DESCRIPTION_FILE})
+    set(CPACK_RESOURCE_FILE_WELCOME ${ARG_WELCOME_FILE})
+    set(CPACK_RESOURCE_FILE_LICENSE ${ARG_LICENSE_FILE})
+    set(CPACK_RESOURCE_FILE_README ${ARG_README_FILE})
+    set(CPACK_COMPONENTS_GROUPING ONE_PER_GROUP)
+    set(CPACK_PACKAGE_CONTACT ${ARG_CONTACT})
+
+    set(CPACK_VERBATIM_VARIABLES TRUE)
+    set(CPACK_SOURCE_IGNORE_FILES
+        /\\.git/
+        \\.swp
+        \\.orig
+    )
+
+    # [3.1.2] - Enable packaging generators for "package" target
+    if(WIN32)
+        set(CPACK_GENERATOR ZIP WIX IFW)
+    elseif(APPLE)
+        set(CPACK_GENERATOR TGZ productbuild)
+    elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        set(CPACK_GENERATOR TGZ DEB RPM)
+    else()
+        set(CPACK_GENERATOR TGZ)
+    endif()
+
+    # [3.1.3] - Creating packaging variants
+
+    # Figure out the different types of targets present in the project
+    # and use that to determine which types of packages to create
+    get_property(components GLOBAL PROPERTY ${PROJECT_NAME}_COMPONENT_LIST)
+    foreach(component IN LISTS components)
+        get_property(target_types GLOBAL PROPERTY ${PROJECT_NAME}_${component}_TARGET_TYPES)
+        list(APPEND project_contains ${target_types})
     endforeach()
-    set_property(GLOBAL APPEND PROPERTY ADDLIB_TARGET_LIST ${targets})
-    set_property(GLOBAL APPEND PROPERTY ADDLIB_${PROJECT_NAME}_TARGET_LIST ${targets})
-    unset(targets)
-endfunction()
+    list(REMOVE_DUPLICATES project_contains)
 
-function(list_targets) # [3.1.2]
-    # Prints out a list of all targets created using add_lib or manually registered
-    # with register_target()
-    get_property(targets GLOBAL PROPERTY ADDLIB_TARGET_LIST)
-    if(targets)
-        message(NOTICE "Targets defined by build:")
-        foreach(target_name IN LISTS targets)
-            get_target_property(type ${target_name} TYPE)
-            message(NOTICE "[${type}]\t${target_name}")
-        endforeach()
+    # There are four packaging configurations a project can take.
+    # - Dynamically linked executable
+    # - Statically linked executable
+    # - Shared Library
+    # - Static / Header-Only Library
+    # The different package options form a hierachy and are merged into
+    # the parent package if the parent would otherwise be empty.
+    # - Base: Executables, shared libraries, and dynamically loadable libraries
+    #  - Development: Header files
+    #   - Static: Static Libraries
+    set(base_group ${PROJECT_NAME})
+    if(EXECUTABLE IN_LIST project_contains)
+        set(dev_group ${PROJECT_NAME}_dev)
+        if(SHARED IN_LIST project_contains)
+            set(static_group ${PROJECT_NAME}_static)
+        else()
+            set(static_group ${PROJECT_NAME}_dev)
+        endif()
+    else()
+        if (SHARED IN_LIST project_contains)
+            set(dev_group ${PROJECT_NAME}_dev)
+            set(static_group ${PROJECT_NAME}_static)
+        else()
+            set(dev_group ${PROJECT_NAME})
+            set(static_group ${PROJECT_NAME})
+        endif()
     endif()
-endfunction()
 
-function(list_project_targets) # [3.1.3]
-    # Prints out a list of all targets in the current project created using add_lib
-    # or manually registered with register_target()
-    get_property(targets GLOBAL PROPERTY ADDLIB_${PROJECT_NAME}_TARGET_LIST)
-    if(targets)
-        message(NOTICE "Targets belonging to ${PROJECT_NAME}:")
-        foreach(target_name IN LISTS targets)
-            get_target_property(type ${target_name} TYPE)
-            message(NOTICE "\t[${type}] ${target_name}")
-        endforeach()
-    endif()
-endfunction()
-
-# [3.2] Test Registration
-function(register_test) # [3.2.1]
-    # Takes test names as arguments, adds them to global and per-project lists
-    # so they can be optionally listed using list_tests() and list_project_tests()
-    foreach(arg ${ARGV})
-        list(APPEND targets ${arg})
+    # [3.1.4] DEB specific options
+    set(CPACK_DEB_COMPONENT_INSTALL ON)
+    set(CPACK_DEBIAN_ENABLE_COMPONENT_DEPENDS ON)
+    set(CPACK_DEBIAN_PACKAGE_DEPENDS)
+    foreach(component IN LISTS components)
+        string(TOUPPER ${base_group} comp)
+        string(TOLOWER ${PROJECT_NAME} package)
+        set(CPACK_DEBIAN_${comp}_PACKAGE_NAME ${package})
+        set(CPACK_DEBIAN_${comp}_FILE_NAME DEB-DEFAULT) 
+        set(CPACK_DEBIAN_${comp}_PACKAGE_SHLIBDEPS ON)
+        if(NOT ${dev_group} STREQUAL ${base_group})
+            string(TOUPPER ${dev_group} comp)
+            set(CPACK_DEBIAN_${comp}_PACKAGE_NAME ${package}-dev)
+            set(CPACK_DEBIAN_${comp}_FILE_NAME DEB-DEFAULT)
+            set(CPACK_DEBIAN_${comp}_PACKAGE_SHLIBDEPS ON)
+            set(CPACK_COMPONENT_${comp}_DEPENDS ${base_group})
+        endif()
+        if(NOT ${static_group} STREQUAL ${dev_group})
+            string(TOUPPER ${static_group} comp)
+            set(CPACK_DEBIAN_${comp}_PACKAGE_NAME ${package}-static)
+            set(CPACK_DEBIAN_${comp}_FILE_NAME DEB-DEFAULT)
+            set(CPACK_DEBIAN_${comp}_PACKAGE_SHLIBDEPS ON)
+            set(CPACK_COMPONENT_${comp}_DEPENDS ${dev_group})
+        endif()
     endforeach()
-    set_property(GLOBAL APPEND PROPERTY ADDLIB_TEST_LIST ${targets})
-    set_property(GLOBAL APPEND PROPERTY ADDLIB_${PROJECT_NAME}_TEST_LIST ${targets})
-    unset(targets)
+
+    # [3.1.5] RPM specific options
+    set(CPACK_RPM_COMPONENT_INSTALL ON)
+    foreach(component IN LISTS components)
+        string(TOUPPER ${base_group} comp)
+        string(TOLOWER ${PROJECT_NAME} package)
+        set(CPACK_RPM_${comp}_PACKAGE_NAME ${package})
+        set(CPACK_RPM_${comp}_FILE_NAME RPM-DEFAULT) 
+        set(CPACK_RPM_${comp}_PACKAGE_AUTOREQPROV ON)
+        if(NOT ${dev_group} STREQUAL ${base_group})
+            string(TOUPPER ${dev_group} comp)
+            set(CPACK_RPM_${comp}_PACKAGE_NAME ${package}-dev)
+            set(CPACK_RPM_${comp}_FILE_NAME RPM-DEFAULT)
+            set(CPACK_RPM_${comp}_PACKAGE_AUTOREQPROV ON)
+            set(CPACK_COMPONENT_${comp}_DEPENDS ${base_group})
+        endif()
+        if(NOT ${static_group} STREQUAL ${dev_group})
+            string(TOUPPER ${static_group} comp)
+            set(CPACK_RPM_${comp}_PACKAGE_NAME ${package}-static)
+            set(CPACK_RPM_${comp}_FILE_NAME RPM-DEFAULT)
+            set(CPACK_RPM_${comp}_PACKAGE_AUTOREQPROV ON)
+            set(CPACK_COMPONENT_${comp}_DEPENDS ${dev_group})
+        endif()
+    endforeach()
+
+    # Make sure all CPACK_* variables are set before including
+    include(CPack)
+
+    # [3.1.6] Component group creation and assignment
+    # Define the project-wide installation groups
+    cpack_add_component_group(${base_group}
+        DISPLAY_NAME "Base Install"
+    )
+    if(NOT ${dev_group} STREQUAL ${base_group})
+        cpack_add_component_group(${dev_group}
+            DISPLAY_NAME "Development Prerequisites"
+            PARENT_GROUP ${base_group}
+        )
+    endif()
+    if (NOT ${static_group} STREQUAL ${dev_group})
+        cpack_add_component_group(${static_group}
+            DISPLAY_NAME "Static Libraries"
+            PARENT_GROUP ${dev_group}
+        )
+    endif()
+
+    # Assign the install groups for each component to the
+    # corresponding project-wide group.
+    foreach(component IN LISTS components)
+            cpack_add_component(${PROJECT_NAME}_${component}
+                REQUIRED
+                GROUP ${base_group}
+            )
+            cpack_add_component(${PROJECT_NAME}_${component}_dev
+                GROUP ${dev_group}
+            )
+            cpack_add_component(${PROJECT_NAME}_${component}_static
+                GROUP ${static_group}
+            )
+    endforeach()
 endfunction()
 
-function(list_tests) # [3.2.2]
-    # Prints out a list of all tests created using add_lib or manually registered
-    # with register_test()
-    get_property(targets GLOBAL PROPERTY ADDLIB_TEST_LIST)
-    if(targets)
-        message(NOTICE "Tests defined by build:")
-        foreach(target_name IN LISTS targets)
-            message(NOTICE "\t${target_name}")
-        endforeach()
-    endif()
-endfunction()
-
-function(list_project_tests) # [3.2.3]
-    # Prints out a list of all tests in the current project created using add_lib
-    # or manually registered with register_test()
-    get_property(targets GLOBAL PROPERTY ADDLIB_${PROJECT_NAME}_TEST_LIST)
-    if(targets)
-        message(NOTICE "Tests belonging to ${PROJECT_NAME}:")
-        foreach(target_name IN LISTS targets)
-            message(NOTICE "\t${target_name}")
-        endforeach()
-    endif()
+# [4]
+function(list_targets) # [4.1]
 endfunction()
