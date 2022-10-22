@@ -50,7 +50,11 @@ function(add_lib target) # [1.2]
         SHARED
         SHARED_AND_STATIC
     )
-    cmake_parse_arguments(ARG "${flags}" "" "" ${ARGN})
+    set(fields
+    )
+    set(lists
+    )
+    cmake_parse_arguments(ARG "${flags}" "${fields}" "${lists}" ${ARGN})
 
     if(ARG_SHARED OR ARG_SHARED_AND_STATIC)
         list(REMOVE_ITEM ${ARGN} SHARED SHARED_AND_STATIC)
@@ -100,7 +104,8 @@ function(addlib_target target) # [1.3]
         PREFIX            # Generated target prefix (Defaults to ${PROJECT_NAME})
         SUFFIX            # Generated target suffix (Defaults empty, "static" when generating both shared and static libraries)
         TEST_FRAMEWORK    #
-        COMPONENT         #
+        COMPONENT         # Component to assign target to when library is consumed through FIND_PACKAGE(<name> COMPONENT ...)
+        SYMBOL_VISIBILITY # Default symbol visibility for libraries
     )
     set(multiValues
         SOURCES GLOB_SOURCES
@@ -142,14 +147,27 @@ function(addlib_target target) # [1.3]
     endif()
     set(target_name ${prefix}${target}${suffix})
     set(target_alias ${namespace}${target}${suffix})
+    register_target(${target_alias})
 
     if(ARG_EXECUTABLE)
         add_executable(${target_name})
+        set_target_properties(${target_name}
+            PROPERTIES OUTPUT_NAME ${target}
+        )
     else()
+        if(WIN32) # Using a generator expression for this worked on windows but failed on ubuntu
+            set(libname ${target}${suffix})
+        else()
+            set(libname ${target})
+        endif()
+
         add_library(${target_name} ${target_type})
         add_library(${target_alias} ALIAS ${target_name})
         set_target_properties(${target_name}
-            PROPERTIES EXPORT_NAME ${target}${suffix})
+            PROPERTIES 
+                EXPORT_NAME ${target}${suffix}
+                OUTPUT_NAME ${libname}
+        )
     endif()
 
     # [1.3.2]
@@ -463,16 +481,44 @@ function(package_project) # [3.1]
     )
 
     # [3.1.2] - Enable packaging generators for "package" target
+    # [3.1.2.1] - ZIP/TGZ
     if(WIN32)
-        set(CPACK_GENERATOR ZIP WIX IFW)
-    elseif(APPLE)
-        set(CPACK_GENERATOR TGZ productbuild)
-    elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-        set(CPACK_GENERATOR TGZ DEB RPM)
+        list(APPEND available_generators ZIP)
     else()
-        set(CPACK_GENERATOR TGZ)
+        list(APPEND available_generators TGZ)
+    endif()
+    # [3.1.2.2] - WIX
+    find_program(WIX_FOUND candle)
+    if(WIX_FOUND)
+        list(APPEND available_generators WIX)
+    endif()
+    # [3.1.2.3] - NSIS
+    find_program(NSIS_FOUND makensis)
+    if(NSIS_FOUND)
+        list(APPEND available_generators NSIS64)
+    endif()
+    # [3.1.2.4] - NUGET
+    find_program(NUGET_FOUND nuget)
+    if(NUGET_FOUND)
+        list(APPEND available_generators NuGet)
+    endif()
+    # [3.1.2.5] - IFW
+    find_program(IFW_FOUND binarycreator)
+    if(IFW_FOUND)
+        list(APPEND available_generators IFW)
+    endif()
+    # [3.1.2.6] - DEB
+    find_program(DEB_FOUND dpkg-deb)
+    if(DEB_FOUND)
+        list(APPEND available_generators DEB)
+    endif()
+    # [3.1.2.7] - RPM
+    find_program(RPM_FOUND rpmbuild)
+    if(RPM_FOUND)
+        list(APPEND available_generators RPM)
     endif()
 
+    set(CPACK_GENERATOR ${available_generators} CACHE STRING "Enabled packaging generators")
     # [3.1.3] - Creating packaging variants
 
     # Figure out the different types of targets present in the project
@@ -600,5 +646,16 @@ function(package_project) # [3.1]
 endfunction()
 
 # [4]
-function(list_targets) # [4.1]
+
+function(register_target tgt) # [4.1]
+    set_property(GLOBAL APPEND PROPERTY ${PROJECT_NAME}_TARGETS ${tgt})
+endfunction()
+
+function(list_targets) # [4.2]
+    get_property(project_targets GLOBAL PROPERTY ${PROJECT_NAME}_TARGETS)
+    message(NOTICE "Targets in project ${PROJECT_NAME}:")
+    foreach(target IN LISTS project_targets)
+        get_target_property(type ${target} TYPE)
+        message(NOTICE "\t[${type}] ${target}")
+    endforeach()
 endfunction()

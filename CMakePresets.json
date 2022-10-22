@@ -41,6 +41,11 @@
         {
             "name": "default",
             "configurePreset": "default"
+        },
+        {
+            "name": "package",
+            "configurePreset": "default",
+            "targets":["package"]
         }
     ],
     "testPresets": [

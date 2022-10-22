@@ -19,6 +19,7 @@ add_lib(basic_library
         test/hello_world.cpp
 )
 
+list_targets()
 install_project()
 package_project(
     CONTACT "foo@example.com"
