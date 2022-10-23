@@ -49,6 +49,9 @@ function(add_lib target) # [1.2]
     set(options
         SHARED
         SHARED_AND_STATIC
+        STATIC
+        HEADER_ONLY
+        MODULE
     )
     set(oneValueArgs
         EXPORT_HEADER
@@ -62,7 +65,14 @@ function(add_lib target) # [1.2]
         set(ARG_DEFAULT_VISIBILITY hidden)
     endif()
 
-    if(ARG_SHARED OR ARG_SHARED_AND_STATIC)
+    # If the library type is not specified it will default to building static libraries
+    # unless the option BUILD_SHARED_LIBS is enabled.
+    # If we are using this default behavious we need to treat it the same as if we were generating
+    # shared and static variants in order to have consistent behaviour. Modules are included in this
+    # since they are just a type of shared library intended to be dynamically loaded.
+    # To capture this behaviour we can't check if SHARED OR SHARED_AND_STATIC OR MODULE since this doesn't
+    # capture the default case, so instead we test against the negation of the other library types.
+    if(NOT ARG_STATIC OR NOT ARG_HEADER_ONLY)
         list(REMOVE_ITEM ${ARGN} SHARED SHARED_AND_STATIC)
         include(GenerateExportHeader)
 
