@@ -8,6 +8,9 @@ include(AddLib)
 
 add_lib(basic_library
     SHARED_AND_STATIC
+    DEFAULT_VISIBILITY hidden
+    EXPORT_HEADER
+        "ourlib/export.h"
     SOURCES
         include/ourlib/ourlib.hpp
         src/ourlib.cpp

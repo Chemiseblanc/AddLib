@@ -5,7 +5,6 @@ AddLib is a single CMake module that adds alternate commands for defining librar
 It combines many of the target_* and related commands into a simpler, compact interface.
 
 ## To-Do
-- Make symbol visibility handling more consistent
 - Testing framework integration
 - Packaging this library
 

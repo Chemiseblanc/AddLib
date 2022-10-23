@@ -3,6 +3,6 @@
 
 #include "ourlib/export.h"
 
-OURLIB_EXPORT void say_hello();
+BASIC_LIBRARY_EXPORT void say_hello();
 
 #endif // ADDLIB_EXAMPLE_OURLIB_HPP

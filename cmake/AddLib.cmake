@@ -46,43 +46,71 @@ function(add_lib target) # [1.2]
     # By default the generated targets follow the naming convention
     # ${PROJECT_NAME}::${target}(_static)
     include(CMakeParseArguments)
-    set(flags
+    set(options
         SHARED
         SHARED_AND_STATIC
     )
-    set(fields
+    set(oneValueArgs
+        EXPORT_HEADER
+        DEFAULT_VISIBILITY
     )
-    set(lists
+    set(multiValueArgs
     )
-    cmake_parse_arguments(ARG "${flags}" "${fields}" "${lists}" ${ARGN})
+    cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
+
+    if(NOT ARG_DEFAULT_VISIBILITY)
+        set(ARG_DEFAULT_VISIBILITY hidden)
+    endif()
 
     if(ARG_SHARED OR ARG_SHARED_AND_STATIC)
         list(REMOVE_ITEM ${ARGN} SHARED SHARED_AND_STATIC)
         include(GenerateExportHeader)
 
-        # Add shared library variant and create export header
         addlib_target(${target} SHARED PREFIX "${PROJECT_NAME}" ${ARGN})
-        generate_export_header(${PROJECT_NAME}_${target}
-            BASE_NAME ${PROJECT_NAME}
-            EXPORT_FILE_NAME "${PROJECT_NAME}/export.h"
-        )
-        target_include_directories(${PROJECT_NAME}_${target}
-            PUBLIC
-                $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
-        )
-
-        # Add static library variant and set define property to
-        # short circuit the symbol export/import macro
         if(ARG_SHARED_AND_STATIC)
-            string(TOUPPER ${PROJECT_NAME} PROJECT_UPPER)
             addlib_target(${target} STATIC PREFIX "${PROJECT_NAME}" SUFFIX "static" ${ARGN})
-            target_compile_definitions(${PROJECT_NAME}_${target}_static
-                PUBLIC
-                    ${PROJECT_UPPER}_STATIC_DEFINE)
-            target_include_directories(${PROJECT_NAME}_${target}_static
+        endif()
+
+        # If symbols are hidden generate export header and set relevant options
+        string(TOLOWER "${ARG_DEFAULT_VISIBILITY}" visibility)
+        if(visibility STREQUAL "hidden")
+            include(GenerateExportHeader)
+            if(NOT ARG_EXPORT_HEADER)
+                message(FATAL_ERROR "A file path must be specified with EXPORT_HEADER when symbols are hidden")
+            endif()
+
+            set_target_properties(${PROJECT_NAME}_${target}
+                PROPERTIES
+                    C_VISIBILITY_PRESET hidden
+                    CXX_VISIBILITY_PRESET hidden
+                    VISIBILITY_INLINES_HIDDEN TRUE
+            )
+            generate_export_header(${PROJECT_NAME}_${target}
+                BASE_NAME ${target}
+                EXPORT_FILE_NAME ${ARG_EXPORT_HEADER}
+            )
+            target_include_directories(${PROJECT_NAME}_${target}
                 PUBLIC
                     $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
             )
+
+            if(ARG_SHARED_AND_STATIC)
+                string(TOUPPER ${target} TARGET_UPPER)
+                target_compile_definitions(${PROJECT_NAME}_${target}_static
+                    PUBLIC
+                        ${TARGET_UPPER}_STATIC_DEFINE
+                )
+                target_include_directories(${PROJECT_NAME}_${target}_static
+                    PUBLIC
+                        $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
+                )
+            endif()
+        elseif(visibility STREQUAL "visible")
+            set_target_properties(${PROJECT_NAME}_${target}
+                PROPERTIES
+                    CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS true)
+        else()
+            message(FATAL_ERROR "Visibility setting must be one of [hidden|visible]")
         endif()
     else()
         # Passthrough all arguments
@@ -93,21 +121,22 @@ endfunction()
 function(addlib_target target) # [1.3] 
     # A shortcut for handling the boilerplate for a modern target-based workflow
     include(CMakeParseArguments)
-    set(flags
+    set(options
         STATIC            # Static Library
         SHARED            # Shared Library
         HEADER_ONLY       # Header-Only Library
         MODULE            # Dynamicly Loadable Library
         EXECUTABLE        # Executable
     )
-    set(singleValues
-        PREFIX            # Generated target prefix (Defaults to ${PROJECT_NAME})
-        SUFFIX            # Generated target suffix (Defaults empty, "static" when generating both shared and static libraries)
-        TEST_FRAMEWORK    #
-        COMPONENT         # Component to assign target to when library is consumed through FIND_PACKAGE(<name> COMPONENT ...)
-        SYMBOL_VISIBILITY # Default symbol visibility for libraries
+    set(oneValueArgs
+        PREFIX             # Generated target prefix (Defaults to ${PROJECT_NAME})
+        SUFFIX             # Generated target suffix (Defaults empty, "static" when generating both shared and static libraries)
+        TEST_FRAMEWORK     #
+        COMPONENT          # Component to assign target to when library is consumed through FIND_PACKAGE(<name> COMPONENT ...)
+        DEFAULT_VISIBILITY # Default symbol visibility for libraries
+        EXPORT_HEADER
     )
-    set(multiValues
+    set(multiValueArgs
         SOURCES GLOB_SOURCES
         INCLUDE_DIRS
         LINK
@@ -119,7 +148,7 @@ function(addlib_target target) # [1.3]
         TEST_EXTRA_LINK_TARGETS
         DEPENDS_ON
     )
-    cmake_parse_arguments(ARG "${flags}" "${singleValues}" "${multiValues}" ${ARGN})
+    cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
     if(UNIX)
         set(STRICT_FLAGS -Wall -Wextra -pedantic)
@@ -317,6 +346,14 @@ function(addlib_target target) # [1.3]
         list(REMOVE_DUPLICATES include_dir_list)
         set_property(GLOBAL PROPERTY ${PROJECT_NAME}_${ARG_COMPONENT}_INCLUDE_DIRS ${include_dir_list})
 
+        # Add extra headers
+        if(ARG_EXPORT_HEADER)
+            get_property(extra_header_list GLOBAL PROPERTY ${PROJECT_NAME}_${ARG_COMPONENT}_EXTRA_HEADERS)
+            list(APPEND extra_header_list ${CMAKE_CURRENT_BINARY_DIR}/${ARG_EXPORT_HEADER})
+            list(REMOVE_DUPLICATES extra_header_list)
+            set_property(GLOBAL PROPERTY ${PROJECT_NAME}_${ARG_COMPONENT}_EXTRA_HEADERS ${extra_header_list})
+        endif()
+
         # Add the component to a list of components in the project if it doesn't already exist
         get_property(component_list GLOBAL PROPERTY ${PROJECT_NAME}_COMPONENT_LIST)
         list(APPEND component_list ${ARG_COMPONENT})
@@ -374,6 +411,13 @@ function(install_project) # [2.1]
             COMPONENT ${PROJECT_NAME}_${component}_dev
             DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
             PATTERN "*"
+        )
+        
+        get_property(extra_headers GLOBAL PROPERTY ${PROJECT_NAME}_${component}_EXTRA_HEADERS)
+        install(
+            FILES ${extra_headers}
+            COMPONENT ${PROJECT_NAME}_${component}_dev
+            DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
         )
         install(
             EXPORT ${PROJECT_NAME}_${component}
