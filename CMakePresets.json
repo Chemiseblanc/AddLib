@@ -46,6 +46,11 @@
             "name": "package",
             "configurePreset": "default",
             "targets":["package"]
+        },
+        {
+            "name": "linux",
+            "configurePreset": "linux",
+            "targets":["package"]
         }
     ],
     "testPresets": [

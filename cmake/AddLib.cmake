@@ -391,6 +391,8 @@ endfunction()
 # [2]
 function(install_project) # [2.1]
     include(GNUInstallDirs)
+    include(InstallRequiredSystemLibraries)
+
     set(CMAKE_INSTALL_DEFAULT_COMPONENT_NAME ${PROJECT_NAME}_Unspecified)
     get_property(components GLOBAL PROPERTY ${PROJECT_NAME}_COMPONENT_LIST)
 
