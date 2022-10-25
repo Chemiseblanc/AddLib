@@ -35,6 +35,7 @@ else()
             /\\.git/
             \\.gitattributes
             \\.gitignore
+            /\\.github/
             /out/
         )
         set(CPACK_VERBATIM_VARIABLES TRUE)

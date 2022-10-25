@@ -16,7 +16,7 @@
             }
         },
         {
-            "name": "windows",
+            "name": "windows-latest",
             "displayName": "Windows",
             "inherits": "base",
             "cacheVariables": {
@@ -29,7 +29,7 @@
             }
         },
         {
-            "name": "linux-deb",
+            "name": "ubuntu-latest",
             "displayName": "Linux (DEB-Based System)",
             "inherits": "base",
             "cacheVariables": {
@@ -74,16 +74,16 @@
     ],
     "buildPresets": [
         {
-            "name": "release-win",
-            "configurePreset": "windows",
+            "name": "release-windows-latest",
+            "configurePreset": "windows-latest",
             "targets": [
                 "package",
                 "package_source"
             ]
         },
         {
-            "name": "release-deb",
-            "configurePreset": "linux-deb",
+            "name": "release-ubuntu-latest",
+            "configurePreset": "ubuntu-latest",
             "targets": [
                 "package",
                 "package_source"
