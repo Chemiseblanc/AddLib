@@ -25,6 +25,7 @@ jobs:
           cmake --build --preset=release-${{matrix.os}}
       - uses: ncipollo/release-action@v1
         with:
-          artifacts: "out/build/${{matrix.os}}/_CPack_Packages/**/*.zip,out/build/${{matrix.os}}/_CPack_Packages/**/*.deb"
-          tokens: ${{secretes.GITHUB_TOKEN}}
+          artifacts: "out/build/**/AddLib*.zip,out/build/**/AddLib*.tar.gz,out/build/**/AddLib*.deb"
+          allowUpdates: true
+          token: ${{secrets.GITHUB_TOKEN}}
 

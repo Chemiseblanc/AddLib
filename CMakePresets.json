@@ -87,24 +87,21 @@
             "name": "release-windows-latest",
             "configurePreset": "windows-latest",
             "targets": [
-                "package",
-                "package_source"
+                "package"
             ]
         },
         {
             "name": "release-ubuntu-latest",
             "configurePreset": "ubuntu-latest",
             "targets": [
-                "package",
-                "package_source"
+                "package"
             ]
         },
         {
             "name": "release-rpm",
             "configurePreset": "linux-rpm",
             "targets": [
-                "package",
-                "package_source"
+                "package"
             ]
         },
         {
