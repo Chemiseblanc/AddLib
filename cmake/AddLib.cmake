@@ -27,11 +27,12 @@
 # 3.1.5   - RPM specific options
 # 3.1.6   - Component grouping
 # 4     - Utility
-# 4.1    - function(list_targets)
+# 4.1    - function(register_target)
+# 4.2    - function(list_targets)
+# 4.3    - function(list_test_backends)
+# 5     - Help
+# 5.1    - function(addlib_usage)
 include_guard(GLOBAL)
-message(NOTICE "===========================================================")
-message(NOTICE "=== Using AddLib.cmake v2.0.0 - Modern CMake Simplified ===")
-message(NOTICE "===========================================================")
 
 # [1] Target Creation
 function(add_exe target) # [1.1]
@@ -137,6 +138,7 @@ function(addlib_target target) # [1.3]
         HEADER_ONLY       # Header-Only Library
         MODULE            # Dynamicly Loadable Library
         EXECUTABLE        # Executable
+        NO_INSTALL        # Don't install files associated with target
     )
     set(oneValueArgs
         PREFIX             # Generated target prefix (Defaults to ${PROJECT_NAME})
@@ -149,7 +151,7 @@ function(addlib_target target) # [1.3]
     set(multiValueArgs
         SOURCES GLOB_SOURCES
         INCLUDE_DIRS
-        LINK
+        LINK TEST_LINK
         COMPILE_FEATURES
         COMPILE_FLAGS
         PRECOMPILE_HEADERS
@@ -314,14 +316,15 @@ function(addlib_target target) # [1.3]
     if(BUILD_TESTING) 
         if(ARG_TESTS)
             if(ARG_TEST_FRAMEWORK)
-                if(${ARG_TEST_FRAMEWORK} STREQUAL Catch2)
-                    # TODO
-                elseif(${ARG_TEST_FRAMEWORK} STREQUAL GTest)
-                    # TODO
-                elseif(${ARG_TEST_FRAMEWORK} STREQUAL BoostTest)
-                    #TODO
+                include(AddLibTest${ARG_TEST_FRAMEWORK} OPTIONAL RESULT_VARIABLE test_integration_found)
+                if(test_integration_found)
+                    addlib_integrate_tests(
+                        TARGET ${target_name}
+                        SOURCES ${ARG_TESTS}
+                        LINK ${ARG_TEST_LINK}
+                    )
                 else()
-                    message(FATAL_ERROR "Unsupported test framework ${ARG_TEST_FRAMEWORK")
+                    message(FATAL_ERROR "Unsupported test framework ${ARG_TEST_FRAMEWORK}. Make sure the integration module AddLibTest${ARG_TEST_FRAMEWORK}.cmake is present in your module path.")
                 endif()
             else()
                 foreach(TEST_SRC IN LISTS ARG_TESTS)
@@ -331,6 +334,7 @@ function(addlib_target target) # [1.3]
                     target_link_libraries(${test_target}
                         PRIVATE
                             ${target_name}
+                            ${ARG_TEST_LINK}
                     )
                     add_test(NAME ${test_target} COMMAND ${test_target})
                 endforeach()
@@ -339,7 +343,7 @@ function(addlib_target target) # [1.3]
     endif()
 
     # [1.3.4]
-    if(NOT NO_INSTALL)
+    if(NOT ARG_NO_INSTALL)
         # Assign the target to a default package component if one isn't specified
         if(NOT ARG_COMPONENT)
             set(ARG_COMPONENT Unspecified)
@@ -392,6 +396,19 @@ endfunction()
 function(install_project) # [2.1]
     include(GNUInstallDirs)
     include(InstallRequiredSystemLibraries)
+    include(CMakeParseArguments)
+
+    set(options)
+    set(oneValueArgs "COMPATIBILITY")
+    set(multiValueArgs "DEPENDS_ON")
+    cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "${DEPENDS_ON}" ${ARGN})
+    if(ARG_COMPATIBILITY)
+        specify_version_compatability(${ARG_COMPATIBILITY})
+    endif()
+    if(ARG_DEPENDS_ON)
+        specify_dependency(DEPENDS_ON ${ARG_DEPENDS_ON})
+    endif()
+    
 
     set(CMAKE_INSTALL_DEFAULT_COMPONENT_NAME ${PROJECT_NAME}_Unspecified)
     get_property(components GLOBAL PROPERTY ${PROJECT_NAME}_COMPONENT_LIST)
@@ -702,7 +719,6 @@ function(package_project) # [3.1]
 endfunction()
 
 # [4]
-
 function(register_target tgt) # [4.1]
     set_property(GLOBAL APPEND PROPERTY ${PROJECT_NAME}_TARGETS ${tgt})
 endfunction()
@@ -714,4 +730,99 @@ function(list_targets) # [4.2]
         get_target_property(type ${target} TYPE)
         message(NOTICE "\t[${type}] ${target}")
     endforeach()
+endfunction()
+
+function(list_test_frameworks) # [4.3]
+    foreach(dir IN LISTS CMAKE_MODULE_PATH)
+        file(GLOB modules LIST_DIRECTORIES false RELATIVE ${dir} "${dir}/AddLibTest*.cmake")
+        list(APPEND found_frameworks ${modules})
+    endforeach()
+    message(NOTICE "Discovered testing frameworks:")
+    foreach(backend IN LISTS found_frameworks)
+        string(REGEX MATCH "AddLibTest(.+)\.cmake" backend_name ${backend})
+        message(NOTICE "\t${CMAKE_MATCH_1}")
+    endforeach()
+endfunction()
+
+function(addlib_usage) # [5.1]
+    message(NOTICE "===========================================================")
+    message(NOTICE "=== Using AddLib.cmake v2.0.0 - Modern CMake Simplified ===")
+    message(NOTICE "===========================================================")
+    message(NOTICE "====================================")
+    message(NOTICE "== Usage: Adding a new executable ==")
+    message(NOTICE "====================================")
+    message(NOTICE "add_exe(<name>
+    [SOURCES <sources>... [PUBLIC <sources>...] [PRIVATE <sources>...] [INTERFACE <sources>...]]
+    [GLOB_SOURCES] <expr>... [PUBLIC <expr>... ] [PRIVATE <expr>... ] [INTERFACE <expr>...]]
+    [INCLUDE_DIRS <dirs>... [PUBLIC <dirs>... ] [PRIVATE <dirs>... ] [INTERFACE <dirs>...]]
+    [COMPILE_FEATURES <features>... [PUBLIC <features>...] [PRIVATE <features>...] [INTERFACE <features>...]]
+    [COMPILE_FLAGS <flags>... [PUBLIC <flags>... ] [PRIVATE <flags>... ] [INTERFACE <flags>...]]
+    [PRECOMPILE_HEADERS <headers>... [PUBLIC <headers>...] [PRIVATE <headers>...] [INTERFACE <headers>...]]
+    [PROPERTIES <properties>...]
+
+    [NO_INSTALL]
+    [COMPONENT <component>]
+    [DEPENDS_ON <components>...]
+    
+    [TEST_FRAMEWORK <framework>] 
+    [TESTS <test_sources>...]
+    [GLOB_TESTS <glob_exprs>...]\n)")
+    message(NOTICE "====================================")
+    message(NOTICE "== Usage: Adding a new library    ==")
+    message(NOTICE "====================================")
+    message(NOTICE "add_lib(<name>
+    [SHARED|SHARED_AND_STATIC|STATIC|HEADER_ONLY|MODULE]
+
+    [DEFAULT_VISIBILITY hidden|visible]
+    [EXPORT_HEADER <path>]
+
+    [SOURCES <sources>... [PUBLIC <sources>...] [PRIVATE <sources>...] [INTERFACE <sources>...]]
+    [GLOB_SOURCES] <expr>... [PUBLIC <expr>... ] [PRIVATE <expr>... ] [INTERFACE <expr>...]]
+    [INCLUDE_DIRS <dirs>... [PUBLIC <dirs>... ] [PRIVATE <dirs>... ] [INTERFACE <dirs>...]]
+    [COMPILE_FEATURES <features>... [PUBLIC <features>...] [PRIVATE <features>...] [INTERFACE <features>...]]
+    [COMPILE_FLAGS <flags>... [PUBLIC <flags>... ] [PRIVATE <flags>... ] [INTERFACE <flags>...]]
+    [PRECOMPILE_HEADERS <headers>... [PUBLIC <headers>...] [PRIVATE <headers>...] [INTERFACE <headers>...]]
+    [PROPERTIES <properties>...]
+
+    [NO_INSTALL]
+    [COMPONENT <component>]
+    [DEPENDS_ON <components>...]
+    
+    [TEST_FRAMEWORK <framework>] 
+    [TESTS <test_sources>...]
+    [GLOB_TESTS <expr>...]\n)")
+    message(NOTICE "====================================")
+    message(NOTICE "== Usage: Configure Installation  ==")
+    message(NOTICE "====================================")
+    message(NOTICE "version-string := MAJOR[.MINOR[.PATCH]]")
+    message(NOTICE "dep-string := <Package>[@<version-string>][::<component>]")
+    message(NOTICE "install_project(
+    [COMPATIBILITY AnyNewerVersion|SameMajorVersion|SameMinorVersion|ExactVersion]
+    [DEPENDS_ON <dep-string>...]\n)")
+    message(NOTICE "specify_dependency 
+    [COMPONENT <component>]
+    [DEPENDS_ON <dep-string>...]\n)")
+    message(NOTICE "====================================")
+    message(NOTICE "== Usage: Configure Packaging     ==")
+    message(NOTICE "====================================")
+    message(NOTICE "package_project(
+    CONTACT <contact>
+    [VENDOR <organization>]
+    [SUMMARY <short description>]
+    [WELCOME_FILE <path>]
+    [DESCRIPTION_FILE <path>]
+    [README_FILE <path>]
+    [LICENSE_FILE <path>]\n)")
+    message(NOTICE "====================================")
+    message(NOTICE "== Help: Usage Information        ==")
+    message(NOTICE "====================================")
+    message(NOTICE "addlib_usage()")
+    message(NOTICE "====================================")
+    message(NOTICE "== Help: Available targets        ==")
+    message(NOTICE "====================================")
+    message(NOTICE "list_targets()")
+    message(NOTICE "====================================")
+    message(NOTICE "== Help: Available test frameworks==")
+    message(NOTICE "====================================")
+    message(NOTICE "list_test_frameworks()")
 endfunction()

@@ -1,5 +1,5 @@
 {
-    "version": 2,
+    "version": 6,
     "cmakeMinimumRequired": {
         "major": 3,
         "minor": 20,
@@ -7,14 +7,21 @@
     },
     "configurePresets": [
         {
-            "name": "default",
-            "displayName": "Default",
-            "binaryDir": "${sourceDir}/out/build/${presetName}",
+            "name": "base",
+            "hidden": true,
             "generator": "Ninja",
+            "binaryDir": "${sourceDir}/out/build/${presetName}",
+            "cacheVariables": {
+                "CMAKE_INSTALL_PREFIX": "${sourceDir}/out/install/${presetName}"
+            }
+        },
+        {
+            "name": "windows",
+            "displayName": "Windows",
+            "inherits": "base",
             "cacheVariables": {
                 "CMAKE_CXX_COMPILER": "cl.exe",
-                "CMAKE_INSTALL_PREFIX": "${sourceDir}/out/install/${presetName}",
-                "BUILD_EXAMPLES": true
+                "CPACK_GENERATOR": "ZIP"
             },
             "architecture": {
                 "value": "x64",
@@ -22,41 +29,80 @@
             }
         },
         {
-            "name": "linux",
-            "displayName": "Linux",
-            "binaryDir": "${sourceDir}/out/build/${presetName}",
-            "generator": "Ninja",
+            "name": "linux-deb",
+            "displayName": "Linux (DEB-Based System)",
+            "inherits": "base",
             "cacheVariables": {
-                "CMAKE_CXX_COMPILER": "g++",
-                "CMAKE_INSTALL_PREFIX": "${sourceDir}/out/install/${presetName}",
-                "BUILD_EXAMPLES": true
+                "CPACK_GENERATOR": "TGZ;DEB"
+            }
+        },
+        {
+            "name": "linux-rpm",
+            "displayName": "Linux (RPM-Based System)",
+            "inherits": "base",
+            "cacheVariables": {
+                "CPACK_GENERATOR": "TGZ;RPM"
+            }
+        },
+        {
+            "name": "ci-win",
+            "hidden": true,
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Windows"
+            },
+            "cacheVariables": {
+                "CMAKE_CXX_COMPILER": "cl.exe"
             },
             "architecture": {
                 "value": "x64",
                 "strategy": "external"
+            }
+        },
+        {
+            "name": "ci",
+            "displayName": "Continuous Integration",
+            "inherits": [
+                "base",
+                "ci-win"
+            ],
+            "cacheVariables": {
+                "BUILD_EXAMPLES": "ON"
             }
         }
     ],
     "buildPresets": [
         {
-            "name": "default",
-            "configurePreset": "default"
+            "name": "release-win",
+            "configurePreset": "windows",
+            "targets": [
+                "package",
+                "package_source"
+            ]
         },
         {
-            "name": "package",
-            "configurePreset": "default",
-            "targets":["package"]
+            "name": "release-deb",
+            "configurePreset": "linux-deb",
+            "targets": [
+                "package",
+                "package_source"
+            ]
         },
         {
-            "name": "linux",
-            "configurePreset": "linux",
-            "targets":["package"]
+            "name": "release-rpm",
+            "configurePreset": "linux-rpm",
+            "targets": [
+                "package",
+                "package_source"
+            ]
         }
     ],
     "testPresets": [
         {
-            "name": "default",
-            "configurePreset": "default"
+            "name": "ci",
+            "displayName": "Continuous Integration",
+            "configurePreset": "ci"
         }
     ]
 }

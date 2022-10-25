@@ -5,8 +5,7 @@ AddLib is a single CMake module that adds alternate commands for defining librar
 It combines many of the target_* and related commands into a simpler, compact interface.
 
 ## To-Do
-- Testing framework integration
-- Packaging this library
+- Automate releases
 
 ## Feautres
 - add_lib or add_exe functions that simplify modern target-based workflows
@@ -17,63 +16,99 @@ It combines many of the target_* and related commands into a simpler, compact in
 
 ## Usage
 Examples can be found in the [examples/](examples/) folder.
-### Defining Libraries
-```cmake
-add_lib(ourlib
-  SHARED_AND_STATIC
-  SOURCES
-    ...
-  INCLUDE_DIRS
-    ...
-  LINK
-    PUBLIC
-      ...
-    PRIVATE
-      ...
-)
 ```
-### Defining Executables
-```cmake
-add_exe(ourexe
-  SOURCES
-    ...
-  LINK
-    ...
-)
-```
-### Unit Testing
-Without a framework:
-```cmake
-add_lib(ourlib
-  ...
-  TESTS
-    tests/foo.cpp
-  )
-```
+===========================================================
+=== Using AddLib.cmake v2.0.0 - Modern CMake Simplified ===
+===========================================================
+Targets in project OurLib:
+	[SHARED_LIBRARY] OurLib::basic_library
+	[STATIC_LIBRARY] OurLib::basic_library_static
+Discovered testing backends:
+	Catch2
+	GTest
+====================================
+== Usage: Adding a new executable ==
+====================================
+Adding a new executable:
+add_exe(<name>
+    [SOURCES <sources>... [PUBLIC <sources>...] [PRIVATE <sources>...] [INTERFACE <sources>...]]
+    [GLOB_SOURCES] <expr>... [PUBLIC <expr>... ] [PRIVATE <expr>... ] [INTERFACE <expr>...]]
+    [INCLUDE_DIRS <dirs>... [PUBLIC <dirs>... ] [PRIVATE <dirs>... ] [INTERFACE <dirs>...]]
+    [COMPILE_FEATURES <features>... [PUBLIC <features>...] [PRIVATE <features>...] [INTERFACE <features>...]]
+    [COMPILE_FLAGS <flags>... [PUBLIC <flags>... ] [PRIVATE <flags>... ] [INTERFACE <flags>...]]
+    [PRECOMPILE_HEADERS <headers>... [PUBLIC <headers>...] [PRIVATE <headers>...] [INTERFACE <headers>...]]
+    [PROPERTIES <properties>...]
 
-With a framework:
-```cmake
-add_lib(ourlib
-  ...
-  TEST_FRAMEWORK GTest
-  TESTS
-    tests/foo.cpp
+    [NO_INSTALL]
+    [COMPONENT <component>]
+    [DEPENDS_ON <components>...]
+    
+    [TEST_FRAMEWORK <framework>] 
+    [TESTS <test_sources>...]
+    [GLOB_TESTS <glob_exprs>...]
 )
-```
-### Installation
-```cmake
-  add_lib(...)
-  add_exe(...)
-  install_project()
-```
-### Packaging
-```cmake
-  add_lib(...)
-  add_exe(...)
-  install_project()
-  package_project(
-    CONTACT "John Doe <foo@example.com>"
-  )
+====================================
+== Usage: Adding a new library    ==
+====================================
+add_lib(<name>
+    [SHARED|SHARED_AND_STATIC|STATIC|HEADER_ONLY|MODULE]
+
+    [DEFAULT_VISIBILITY hidden|visible]
+    [EXPORT_HEADER <path>]
+
+    [SOURCES <sources>... [PUBLIC <sources>...] [PRIVATE <sources>...] [INTERFACE <sources>...]]
+    [GLOB_SOURCES] <expr>... [PUBLIC <expr>... ] [PRIVATE <expr>... ] [INTERFACE <expr>...]]
+    [INCLUDE_DIRS <dirs>... [PUBLIC <dirs>... ] [PRIVATE <dirs>... ] [INTERFACE <dirs>...]]
+    [COMPILE_FEATURES <features>... [PUBLIC <features>...] [PRIVATE <features>...] [INTERFACE <features>...]]
+    [COMPILE_FLAGS <flags>... [PUBLIC <flags>... ] [PRIVATE <flags>... ] [INTERFACE <flags>...]]
+    [PRECOMPILE_HEADERS <headers>... [PUBLIC <headers>...] [PRIVATE <headers>...] [INTERFACE <headers>...]]
+    [PROPERTIES <properties>...]
+
+    [NO_INSTALL]
+    [COMPONENT <component>]
+    [DEPENDS_ON <components>...]
+    
+    [TEST_FRAMEWORK <framework>] 
+    [TESTS <test_sources>...]
+    [GLOB_TESTS <expr>...]
+)
+====================================
+== Usage: Configure Installation  ==
+====================================
+version-string := MAJOR[.MINOR[.PATCH]]
+dep-string := <Package>[@<version-string>][::<component>]
+install_project(
+    [COMPATIBILITY AnyNewerVersion|SameMajorVersion|SameMinorVersion|ExactVersion]
+    [DEPENDS_ON <dep-string>...]
+)
+specify_dependency 
+    [COMPONENT <component>]
+    [DEPENDS_ON <dep-string>...]
+)
+====================================
+== Usage: Configure Packaging     ==
+====================================
+package_project(
+    CONTACT <contact>
+    [VENDOR <organization>]
+    [SUMMARY <short description>]
+    [WELCOME_FILE <path>]
+    [DESCRIPTION_FILE <path>]
+    [README_FILE <path>]
+    [LICENSE_FILE <path>]
+)
+====================================
+== Help: Usage Information        ==
+====================================
+addlib_usage()
+====================================
+== Help: Available targets        ==
+====================================
+list_targets()
+====================================
+== Help: Available test frameworks==
+====================================
+list_test_frameworks()
 ```
 
 ## Conventions
@@ -87,3 +122,15 @@ The static suffix is only present for the static variant of a library created us
 An alias is also created so target names will stay consistent whether or not the created package is consumed through add_subdirectory or find_package
 
 project::target(_static)
+### Adding new testing frameworks
+To add support for a new test framework create a new file AddLibTest(name).cmake and make sure its containing folder is part of CMAKE_MODULE_PATH.
+Then implement the function
+```cmake
+addlib_integrate_tests(
+  TARGET <name>
+  SOURCES <sources>...
+  LINK <targets>...
+)
+```
+This function is supposed to create and register test target(s) for the specified target.
+The test targets should link against the TARGET argument, any framework specific targets, and any extra libraries specified by LINK. It should also register the created tests with CTest.
