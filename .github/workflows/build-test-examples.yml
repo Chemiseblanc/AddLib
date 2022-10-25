@@ -16,10 +16,10 @@ jobs:
       - uses: ilammy/msvc-dev-cmd@v1
       - name: "Generate"
         run: |
-          cmake --preset=ci
+          cmake --preset=ci-${{matrix.os}}
       - name: "Build"
         run: |
-          cmake --build --preset=ci
+          cmake --build --preset=ci-${{matrix.os}}
       - name: "Test"
         run: |
-          ctest --preset=ci
+          ctest --preset=ci-${{matrix.os}}

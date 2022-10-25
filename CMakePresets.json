@@ -61,11 +61,21 @@
             }
         },
         {
-            "name": "ci",
-            "displayName": "Continuous Integration",
+            "name": "ci-windows-latest",
+            "displayName": "Continuous Integration (Windows)",
             "inherits": [
                 "base",
                 "ci-win"
+            ],
+            "cacheVariables": {
+                "BUILD_EXAMPLES": "ON"
+            }
+        },
+        {
+            "name": "ci-ubuntu-latest",
+            "displayName": "Continuous Integration (Ubuntu)",
+            "inherits": [
+                "base"
             ],
             "cacheVariables": {
                 "BUILD_EXAMPLES": "ON"
@@ -96,13 +106,26 @@
                 "package",
                 "package_source"
             ]
+        },
+        {
+            "name": "ci-ubuntu-latest",
+            "configurePreset": "ci-ubuntu-latest"
+        },
+        {
+            "name": "ci-windows-latest",
+            "configurePreset": "ci-windows-latest"
         }
     ],
     "testPresets": [
         {
-            "name": "ci",
-            "displayName": "Continuous Integration",
-            "configurePreset": "ci"
+            "name": "ci-ubuntu-latest",
+            "displayName": "Continuous Integration (Ubuntu)",
+            "configurePreset": "ci-ubuntu-latest"
+        },
+        {
+            "name": "ci-windows-latest",
+            "displayName": "Continuous Integration (Windows)",
+            "configurePreset": "ci-windows-latest"
         }
     ]
 }
