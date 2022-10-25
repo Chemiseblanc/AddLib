@@ -5,7 +5,7 @@ AddLib is a single CMake module that adds alternate commands for defining librar
 It combines many of the target_* and related commands into a simpler, compact interface.
 
 ## To-Do
-- Automate releases
+- Improve support for MacOS.
 
 ## Feautres
 - add_lib or add_exe functions that simplify modern target-based workflows
