@@ -1,10 +1,13 @@
 {
-    "version": 3,
+    "version": 4,
     "cmakeMinimumRequired": {
         "major": 3,
         "minor": 20,
         "patch": 0
     },
+    "include": [
+        "PlatformPresets.json"
+    ],
     "configurePresets": [
         {
             "name": "base",
@@ -16,92 +19,65 @@
             }
         },
         {
-            "name": "windows",
+            "name": "ci",
             "hidden": true,
-            "inherits": "base",
             "cacheVariables": {
-                "CMAKE_CXX_COMPILER": "cl.exe"
-            },
-            "architecture": {
-                "value": "x64",
-                "strategy": "external"
-            },
-            "condition": {
-                "type": "equals",
-                "lhs": "${hostSystemName}",
-                "rhs": "Windows"
-            }
-        },
-        {
-            "name": "linux",
-            "hidden": true,
-            "inherits": "base",
-            "condition": {
-                "type": "equals",
-                "lhs": "${hostSystemName}",
-                "rhs": "Linux"
+                "BUILD_EXAMPLES": "ON"
             }
         },
         {
             "name": "windows-latest",
-            "displayName": "Windows",
-            "inherits": "windows",
+            "displayName": "Release",
+            "inherits": [
+                "base",
+                "windows"
+            ],
             "cacheVariables": {
                 "CPACK_GENERATOR": "ZIP"
             }
         },
         {
             "name": "ubuntu-latest",
-            "displayName": "Linux (DEB-Based System)",
-            "inherits": "linux",
+            "displayName": "Release (DEB-Based System)",
+            "inherits": [
+                "base",
+                "linux"
+            ],
             "cacheVariables": {
                 "CPACK_GENERATOR": "TGZ;DEB"
             }
         },
         {
             "name": "redhat",
-            "displayName": "Linux (RPM-Based System)",
-            "inherits": "linux",
+            "displayName": "Release (RPM-Based System)",
+            "inherits": [
+                "base",
+                "linux"
+            ],
             "cacheVariables": {
                 "CPACK_GENERATOR": "TGZ;RPM"
             }
         },
         {
             "name": "ci-windows-latest",
-            "displayName": "Continuous Integration",
-            "inherits": "windows",
-            "cacheVariables": {
-                "BUILD_EXAMPLES": "ON"
-            }
+            "displayName": "Testing",
+            "inherits": [
+                "base",
+                "windows",
+                "ci"
+            ]
         },
         {
             "name": "ci-ubuntu-latest",
-            "displayName": "Continuous Integration",
-            "inherits": "linux",
-            "cacheVariables": {
-                "BUILD_EXAMPLES": "ON"
-            }
+            "displayName": "Testing",
+            "inherits": [
+                "base",
+                "linux",
+                "ci"
+            ]
         }
     ],
     "buildPresets": [
-        {
-            "name": "windows",
-            "hidden": true,
-            "condition": {
-                "type": "equals",
-                "lhs": "${hostSystemName}",
-                "rhs": "Windows"
-            }
-        },
-        {
-            "name": "linux",
-            "hidden": true,
-            "condition": {
-                "type": "equals",
-                "lhs": "${hostSystemName}",
-                "rhs": "Linux"
-            }
-        },
         {
             "name": "release-windows-latest",
             "configurePreset": "windows-latest",
@@ -128,13 +104,13 @@
         },
         {
             "name": "ci-ubuntu-latest",
-            "displayName": "Continuous Integration",
+            "displayName": "Testing",
             "configurePreset": "ci-ubuntu-latest",
             "inherits": "linux"
         },
         {
             "name": "ci-windows-latest",
-            "displayName": "Continuous Integration",
+            "displayName": "Testing",
             "configurePreset": "ci-windows-latest",
             "inherits": "windows"
         }
@@ -142,23 +118,15 @@
     "testPresets": [
         {
             "name": "ci-ubuntu-latest",
-            "displayName": "Continuous Integration",
+            "displayName": "Testing",
             "configurePreset": "ci-ubuntu-latest",
-            "condition": {
-                "type": "equals",
-                "lhs": "${hostSystemName}",
-                "rhs": "Linux"
-            }
+            "inherits": "linux"
         },
         {
             "name": "ci-windows-latest",
-            "displayName": "Continuous Integration",
+            "displayName": "Testing",
             "configurePreset": "ci-windows-latest",
-            "condition": {
-                "type": "equals",
-                "lhs": "${hostSystemName}",
-                "rhs": "Windows"
-            }
+            "inherits": "windows"
         }
     ]
 }
