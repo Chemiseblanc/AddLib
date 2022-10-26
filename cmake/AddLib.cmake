@@ -524,8 +524,10 @@ function(package_project) # [3.1]
         LICENSE_FILE
         README_FILE
         CONTACT
-        )
-    set(lists)
+    )
+    set(lists
+        SIGN_PACKAGE
+    )
     cmake_parse_arguments(ARG "${flags}" "${values}" "${lists}" ${ARGN})
     # if(NOT CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     #     message(FATAL_ERROR "package_project must be called from your root CMakeLists.txt")
@@ -553,12 +555,22 @@ function(package_project) # [3.1]
         \\.orig
     )
 
+    if(ARG_SIGN_PACKAGE OR SIGN_PACKAGE IN_LIST ARG_KEYWORDS_MISSING_VALUES)
+        if(WIN32)
+            windows_sign_exe(${ARG_SIGN_PACKAGE})
+        else()
+            message(WARNING "Code signing is not supported for this platform.")
+        endif()
+    endif()
+
     # [3.1.2] - Enable packaging generators for "package" target
     # [3.1.2.1] - ZIP/TGZ
     if(WIN32)
         list(APPEND available_generators ZIP)
+        set(CPACK_SOURCE_GENERATOR ZIP)
     else()
         list(APPEND available_generators TGZ)
+        set(CPACK_SOURCE_GENERATOR TGZ)
     endif()
     # [3.1.2.2] - WIX
     find_program(WIX_FOUND candle)
@@ -744,11 +756,52 @@ function(list_test_frameworks) # [4.3]
     endforeach()
 endfunction()
 
+function(windows_sign_exe) # [4.4]
+    include(CMakeParseArguments)
+    set(options
+    )
+    set(oneValueArgs
+        CERT_FILE
+        ALGORITHM
+    )
+    set(multiValueArgs
+    )
+    cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
+
+    if(ARG_CERT_FILE)
+        list(APPEND SIGNTOOL_ARGS "/ac" "${ARG_CERT_FILE}")
+    else()
+        list(APEND SIGNTOOL_ARGS "/a")
+    endif()
+    if(ARG_ALGORITHM)
+        list(APPEND SIGNTOOL_ARGS "/fd" "${ARG_ALGORITHM}")
+    else()
+        list(APPEND SIGNTOOL_ARGS "/fd" "certHash")
+    endif()
+
+    find_program(SIGNTOOL_EXE signtool)
+    if(NOT SIGNTOOL_EXE)
+        message(FATAL_ERROR "Unable to locate signtool.exe")
+    endif()
+    set(SIGNTOOL_ARGS)
+
+    set(scriptFile ${PROJECT_BINARY_DIR}/AddLibSignWinExe.cmake)
+    configure_file(
+        ${CMAKE_CURRENT_FUNCTION_LIST_DIR}/AddLibSignWinExe.cmake.in 
+        ${scriptFile}
+        @ONLY
+    )
+
+    set(CPACK_PRE_BUILD_SCRIPTS ${scriptFile} PARENT_SCOPE)
+    set(CPACK_POST_BUILD_SCRIPTS ${scriptFile} PARENT_SCOPE)
+endfunction()
+
+# [5]
 function(addlib_usage) # [5.1]
     message(NOTICE "===========================================================")
     message(NOTICE "=== Using AddLib.cmake v2.0.0 - Modern CMake Simplified ===")
     message(NOTICE "===========================================================")
-    message(NOTICE "====================================")
+    #message(NOTICE "====================================")
     message(NOTICE "== Usage: Adding a new executable ==")
     message(NOTICE "====================================")
     message(NOTICE "add_exe(<name>
@@ -812,7 +865,11 @@ function(addlib_usage) # [5.1]
     [WELCOME_FILE <path>]
     [DESCRIPTION_FILE <path>]
     [README_FILE <path>]
-    [LICENSE_FILE <path>]\n)")
+    [LICENSE_FILE <path>]
+    [SIGN_PACKAGE
+        [CERT_FILE <certificate>]
+        [ALGORITHM <algorithm>]
+    ]\n)")
     message(NOTICE "====================================")
     message(NOTICE "== Help: Usage Information        ==")
     message(NOTICE "====================================")

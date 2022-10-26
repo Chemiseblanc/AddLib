@@ -26,3 +26,5 @@ install_project()
 package_project(
     CONTACT "foo@example.com"
 )
+
+addlib_usage()

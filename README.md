@@ -20,16 +20,8 @@ Examples can be found in the [examples/](examples/) folder.
 ===========================================================
 === Using AddLib.cmake v2.0.0 - Modern CMake Simplified ===
 ===========================================================
-Targets in project OurLib:
-	[SHARED_LIBRARY] OurLib::basic_library
-	[STATIC_LIBRARY] OurLib::basic_library_static
-Discovered testing backends:
-	Catch2
-	GTest
-====================================
 == Usage: Adding a new executable ==
 ====================================
-Adding a new executable:
 add_exe(<name>
     [SOURCES <sources>... [PUBLIC <sources>...] [PRIVATE <sources>...] [INTERFACE <sources>...]]
     [GLOB_SOURCES] <expr>... [PUBLIC <expr>... ] [PRIVATE <expr>... ] [INTERFACE <expr>...]]
@@ -96,6 +88,10 @@ package_project(
     [DESCRIPTION_FILE <path>]
     [README_FILE <path>]
     [LICENSE_FILE <path>]
+    [SIGN_PACKAGE
+        [CERT_FILE <certificate>]
+        [ALGORITHM <algorithm>]
+    ]
 )
 ====================================
 == Help: Usage Information        ==

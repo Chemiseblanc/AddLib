@@ -1,0 +1,30 @@
+set(SIGNTOOL_EXE "@SIGNTOOL_EXE@")
+set(SIGNTOOL_ARGS "@SIGNTOOL_ARGS@")
+
+function(sign_file file)
+    execute_process(
+        COMMAND ${SIGNTOOL_EXE} ${SIGNTOOL_ARGS} "${file}"
+        WORKING_DIRECTORY ${CMAKE_INSTALL_PREFIX}
+        RESULT_VARIABLE sign_retc
+    )
+    if(${sign_retc} EQUAL "1")
+        message(FATAL_ERROR "Error when signing file ${file}")
+    elseif(${sign_retc} EQUAL "2")
+        message(WARNING "Warning when signing file ${file}")
+    endif()
+endfunction()
+
+if(NOT CPACK_PACKAGE_FILES)
+    # Pre-Build: Sign all exes in staging directory
+    file(GLOB_RECURSE exe_files "${CPACK_PACKAGE_DIRECTORY}/_CPack_Packages/*.exe")
+    foreach(file IN LISTS exe_files)
+        message(NOTICE "Signing ${file}")
+        sign_file(${file})
+    endforeach()
+else()
+    # Post-Build: Sign installer exes
+    foreach(file IN LISTS CPACK_PACKAGE_FILES)
+        message(NOTICE "Signing ${file}")
+        sign_file(${file})
+    endforeach()
+endif()

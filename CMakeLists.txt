@@ -29,7 +29,7 @@ else()
     )
 
     if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
-        set(CPACK_PACKAGE_VENDOR "mgibson")
+        set(CPACK_PACKAGE_VENDOR "AddLib")
         set(CPACK_PACKAGE_CONTACT "Matt Gibson <matt@mgibson.ca>")
         set(CPACK_SOURCE_IGNORE_FILES
             /\\.git/
