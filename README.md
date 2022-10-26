@@ -68,7 +68,7 @@ add_lib(<name>
 == Usage: Configure Installation  ==
 ====================================
 version-string := MAJOR[.MINOR[.PATCH]]
-dep-string := <Package>[@<version-string>][::<component>]
+dep-string := <package>[@<version-string>][::<component>]
 install_project(
     [COMPATIBILITY AnyNewerVersion|SameMajorVersion|SameMinorVersion|ExactVersion]
     [DEPENDS_ON <dep-string>...]

@@ -35,6 +35,7 @@
         {
             "name": "linux",
             "hidden": true,
+            "inherits": "base",
             "condition": {
                 "type": "equals",
                 "lhs": "${hostSystemName}",
@@ -118,8 +119,8 @@
             ]
         },
         {
-            "name": "release-rpm",
-            "configurePreset": "linux-rpm",
+            "name": "release-redhat",
+            "configurePreset": "redhat",
             "inherits": "linux",
             "targets": [
                 "package"
