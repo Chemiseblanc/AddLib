@@ -18,7 +18,7 @@ It combines many of the target_* and related commands into a simpler, compact in
 Examples can be found in the [examples/](examples/) folder.
 ```
 ===========================================================
-=== Using AddLib.cmake v2.0.0 - Modern CMake Simplified ===
+=== Using AddLib.cmake v2.1.0 - Modern CMake Simplified ===
 ===========================================================
 == Usage: Adding a new executable ==
 ====================================

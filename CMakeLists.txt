@@ -5,7 +5,7 @@ if(NOT DEFINED PROJECT_NAME)
 endif()
 
 project(AddLib
-        VERSION 2.0
+        VERSION 2.1.0
         DESCRIPTION "Simplified interfaces for modern target-based workflows"
         HOMEPAGE_URL "https://github.com/Chemiseblanc/AddLib"
         )
@@ -25,7 +25,7 @@ if(NOT IS_SUBPROJECT)
         include(CMakePackageConfigHelpers)
         write_basic_package_version_file(
             AddLibConfigVersion.cmake
-            COMPATIBILITY ExactVersion
+            COMPATIBILITY SameMajorVersion
             ARCH_INDEPENDENT
         )
         install(
