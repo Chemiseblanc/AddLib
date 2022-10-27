@@ -37,7 +37,7 @@ include_guard(GLOBAL)
 # [1] Target Creation
 function(add_exe target) # [1.1]
     # Creates a new executable target
-    addlib_target(target EXECUTABLE ${ARGN})
+    addlib_target(${target} EXECUTABLE ${ARGN})
 endfunction()
 
 function(add_lib target) # [1.2]
