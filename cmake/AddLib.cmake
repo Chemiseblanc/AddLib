@@ -799,7 +799,7 @@ endfunction()
 # [5]
 function(addlib_usage) # [5.1]
     message(NOTICE "===========================================================")
-    message(NOTICE "=== Using AddLib.cmake v2.1.0 - Modern CMake Simplified ===")
+    message(NOTICE "=== Using AddLib.cmake v2.1.1 - Modern CMake Simplified ===")
     message(NOTICE "===========================================================")
     #message(NOTICE "====================================")
     message(NOTICE "== Usage: Adding a new executable ==")
