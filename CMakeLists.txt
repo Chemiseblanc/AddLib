@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 
-if(NOT DEFINED PROJECT_NAME)
-    set(IS_SUBPROJECT false)
+if(DEFINED PROJECT_NAME)
+    set(IS_SUBPROJECT true)
 endif()
 
 project(AddLib
