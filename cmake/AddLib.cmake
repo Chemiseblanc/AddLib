@@ -73,7 +73,7 @@ function(add_lib target) # [1.2]
     # since they are just a type of shared library intended to be dynamically loaded.
     # To capture this behaviour we can't check if SHARED OR SHARED_AND_STATIC OR MODULE since this doesn't
     # capture the default case, so instead we test against the negation of the other library types.
-    if(NOT ARG_STATIC OR NOT ARG_HEADER_ONLY)
+    if(NOT ARG_STATIC AND NOT ARG_HEADER_ONLY)
         list(REMOVE_ITEM ${ARGN} SHARED SHARED_AND_STATIC)
         include(GenerateExportHeader)
 
@@ -125,7 +125,7 @@ function(add_lib target) # [1.2]
         endif()
     else()
         # Passthrough all arguments
-        addlib_target(${target} ${ARGN})
+        addlib_target(${target} PREFIX "${PROJECT_NAME}" ${ARGN})
     endif()
 endfunction()
 
@@ -253,7 +253,7 @@ function(addlib_target target) # [1.3]
         ${PUBLIC_OR_INTERFACE}
             $<BUILD_INTERFACE:${INCLUDE_DIRS_PUBLIC}>
             $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
-        PRIVATE
+        ${PRIVATE_OR_INTERFACE}
             $<BUILD_INTERFACE:${INCLUDE_DIRS_PRIVATE}>
         INTERFACE
             $<BUILD_INTERFACE:${INCLUDE_DIRS_INTERFACE}>
@@ -270,10 +270,12 @@ function(addlib_target target) # [1.3]
     # target_link_libraries
     cmake_parse_arguments(LINKS "" "" "${visibilityNames}" ${ARG_LINK})
     target_link_libraries(${target_name}
-        ${PUBLIC_OR_INTERFACE}
+        PUBLIC
             ${LINKS_PUBLIC}
         PRIVATE
             ${LINKS_PRIVATE}
+        INTERFACE
+            ${LINKS_INTERFACE}
         ${PUBLIC_OR_INTERFACE} # Default
             ${LINKS_UNPARSED_ARGUMENTS}
     )
@@ -285,7 +287,9 @@ function(addlib_target target) # [1.3]
             ${COMPILE_FEATURES_PUBLIC}
         PRIVATE
             ${COMPILE_FEATURES_PRIVATE}
-        PRIVATE # Default
+        INTERFACE
+            ${COMPILE_FEATURES_INTERFACE}
+        ${PRIVATE_OR_INTERFACE} # Default
             ${COMPILE_FEATURES_UNPARSED_ARGUMENTS}
     )
 
@@ -293,9 +297,13 @@ function(addlib_target target) # [1.3]
     cmake_parse_arguments(COMPILE_FLAGS "" "" "${visibilityNames}" ${ARG_COMPILE_FLAGS})
     target_compile_options(${target_name}
         PUBLIC
-            ${COMPILE_FEATURES_PUBLIC}
+            ${COMPILE_FLAGS_PUBLIC}
         PRIVATE
             ${COMPILE_FEATUERS_PRIVATE}
+        INTERFACE
+            ${COMPILE_FEATURES_INTERFACE}
+        ${PRIVATE_OR_INTERFACE} # Default
+            ${COMPILE_FLAGS_UNPARSED_ARGUMENTS}
     )
 
     # target_precompile_headers
@@ -305,6 +313,10 @@ function(addlib_target target) # [1.3]
             ${PRECOMPILED_HEADERS_PUBLIC}
         PRIVATE
             ${PRECOMPILED_HEADERS_PRIVATE}
+        INTERFACE
+            ${PRECOMPILED_HEADERS_INTERFACE}
+        ${PUBLIC_OR_INTERFACE} # Default
+            ${PRECOMPILED_HEADERS_UNPARSED_ARGUMENTS}
     )
 
     # set_target_properties
@@ -799,7 +811,7 @@ endfunction()
 # [5]
 function(addlib_usage) # [5.1]
     message(NOTICE "===========================================================")
-    message(NOTICE "=== Using AddLib.cmake v2.1.1 - Modern CMake Simplified ===")
+    message(NOTICE "=== Using AddLib.cmake v2.1.2 - Modern CMake Simplified ===")
     message(NOTICE "===========================================================")
     #message(NOTICE "====================================")
     message(NOTICE "== Usage: Adding a new executable ==")

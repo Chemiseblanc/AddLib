@@ -5,7 +5,7 @@ if(DEFINED PROJECT_NAME)
 endif()
 
 project(AddLib
-        VERSION 2.1.1
+        VERSION 2.1.2
         DESCRIPTION "Simplified interfaces for modern target-based workflows"
         HOMEPAGE_URL "https://github.com/Chemiseblanc/AddLib"
         )
